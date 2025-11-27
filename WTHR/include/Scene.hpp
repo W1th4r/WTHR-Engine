@@ -112,6 +112,20 @@ public:
 		}
 		return entity;
 	}
+	entt::entity CreateSphere(const glm::vec3& position = glm::vec3(0.f)) {
+		auto entity = m_Registry.create();
+		m_Registry.emplace<Transform>(entity, position);
+		auto& mesh = m_Registry.emplace<MeshComponent>(entity, std::make_shared<Shapes::Sphere>(0.5f, 36, 18));
+		return entity;
+	}
+	entt::entity CreateBullet() {
+		auto entity = m_Registry.create();
+		m_Registry.emplace<Transform>(entity, GetCamera().Position);
+		m_Registry.emplace<Color>(entity, glm::vec4(1.f));
+		m_Registry.emplace<Bullet>(entity, GetCamera().Position,GetCamera().Front,0.1f,true);
+		m_Registry.emplace<MeshComponent>(entity, std::make_shared<Shapes::Sphere>(0.1f, 36, 18));
+		return entity;
+	}
 
 	// -------------------------
 	// Helper to create a model (async)

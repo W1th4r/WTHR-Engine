@@ -93,8 +93,8 @@ void Scene::Save(const std::filesystem::path& filepath)
 					meshJson["type"] = "Cube";
 					//	meshJson["size"] = cube->size;
 				}
-				else if (auto sphere = dynamic_cast<Shapes::Pyramid*>(meshComp.mesh.get())) {
-					meshJson["type"] = "Pyramid";
+				else if (auto sphere = dynamic_cast<Shapes::Sphere*>(meshComp.mesh.get())) {
+					meshJson["type"] = "Sphere";
 					//	meshJson["radius"] = sphere->radius;
 				}
 
@@ -200,7 +200,7 @@ void Scene::Load(const std::filesystem::path& filepath)
 				meshComp.mesh = cube;
 			}
 			else if (meshJson["type"] == "Sphere") {
-				auto sphere = std::make_shared<Shapes::Pyramid>();
+				auto sphere = std::make_shared<Shapes::Sphere>(0.5f, 36, 18);
 				//	sphere->radius = meshJson["radius"];
 				meshComp.mesh = sphere;
 			}

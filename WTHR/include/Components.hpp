@@ -9,6 +9,8 @@
 
 //Color component
 struct Color {
+	Color() { value = glm::vec4(1.f); }
+	Color(glm::vec4 col) : value(col) {}
 	glm::vec4 value{ 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA, default white
 };
 
@@ -95,4 +97,18 @@ struct PlayerController {
 struct GroupComponent
 {
 	int id;
+};
+struct Bullet {
+	Bullet(glm::vec3 pos, glm::vec3 vec, float ra, bool ac)
+	{
+		position = pos;
+		velocity = vec * bulletSpeed;
+		radius = ra;
+		active = ac;
+	}
+	glm::vec3 position;
+	glm::vec3 velocity;
+	float bulletSpeed = 10.f;
+	float radius;
+	bool active;
 };

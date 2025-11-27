@@ -38,6 +38,7 @@ public:
     std::vector<unsigned int> indices;
     std::vector<Texture> textures;
 
+    void createMesh() { setupMesh(); }
 private:
     unsigned int VAO, VBO, EBO;
     // Map from context ID to VAO ID

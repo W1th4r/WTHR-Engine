@@ -588,7 +588,7 @@ void Application::Run()
 					// Draw sliders for group master values
 					ImGui::Checkbox("useGravity", &rb.useGravity);
 					ImGui::Checkbox("isKinematic", &rb.isKinematic);
-					ImGui::SliderFloat3("Position", &trans.position.x,-1.f,1.f);
+					ImGui::SliderFloat3("Position", &trans.position.x, -1.f, 1.f);
 					ImGui::ColorEdit4("Color", &color.value.r);
 					//	ImGui::DragFloat3("Group RigidBody", &rb.position.x, 0.1f);
 					//	ImGui::DragFloat3("Group Collider", &col.size.x, 0.1f);
@@ -803,18 +803,31 @@ void Application::Run()
 
 		m_Renderer.Clear();
 
-		if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
-		{
-			double x, y;
-			glfwGetCursorPos(m_WindowManager.GetWindow(), &x, &y);
-			m_Renderer.RenderPicking(scene, x, y);
-		}
 
-		if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		if (scene.GetCameraType() == CameraType::Editor)
 		{
-			double x, y;
-			glfwGetCursorPos(m_WindowManager.GetWindow(), &x, &y);
-			m_Renderer.HandlePickingClick(scene, x, y, ent);
+
+			if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+			{
+				double x, y;
+				glfwGetCursorPos(m_WindowManager.GetWindow(), &x, &y);
+				m_Renderer.RenderPicking(scene, x, y);
+			}
+
+			if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+			{
+				double x, y;
+				glfwGetCursorPos(m_WindowManager.GetWindow(), &x, &y);
+				m_Renderer.HandlePickingClick(scene, x, y, ent);
+			}
+		}
+		else if (scene.GetCameraType() == CameraType::Player)
+		{
+			if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+			{
+				//shoot bullet
+				scene.CreateBullet();
+			}
 		}
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -846,7 +859,7 @@ void Application::Run()
 
 					if (ImGui::BeginMenu("Sphere"))
 					{
-						// etc.
+						if (ImGui::MenuItem("Single")) scene.CreateSphere();
 						ImGui::EndMenu();
 					}
 
