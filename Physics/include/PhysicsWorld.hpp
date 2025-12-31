@@ -36,6 +36,8 @@ private:
 
     void detectCollision();
 
+    void resolveCollision(RigidBody& bodyA, Collider& colA, Transform& transA, RigidBody& bodyB, Collider& colB, Transform& transB);
+
 
     std::vector<RigidBody*>   m_rigidBodies;
     std::vector<Collider*>    m_colliders;

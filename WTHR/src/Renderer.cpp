@@ -81,156 +81,147 @@ void Renderer::DrawTriangle(const glm::vec3& color)
 
 void Renderer::RenderScene(Scene& scene, Shader& shader)
 {
-	// Retrieve the camera (owned by the scene)
+	// Cache camera and projection matrix
 	Camera& camera = scene.GetCamera();
 	auto view = camera.GetViewMatrix();
-	float nearPlane = 0.1f;  // don’t make it too small
-	float farPlane = 100.f; // must be farther than your objects
 
+	// Cache projection matrix - compute once
+	static float nearPlane = 0.1f;
+	static float farPlane = 100.f;
+	static glm::mat4 projection = glm::perspective(
+		glm::radians(45.f),
+		static_cast<float>(width) / static_cast<float>(height),
+		nearPlane, farPlane
+	);
 
-	glm::mat4 projection = glm::perspective(glm::radians(45.f), width / height, nearPlane, farPlane);
+	auto& registry = scene.GetRegistry();
 
-	glm::mat4 model = glm::mat4(1.0f);
-	// Log for debug
-	/*spdlog::trace("Rendering Scene with {} meshes and {} shaders",
-		scene.GetMeshes().size(), scene.GetShaders().size());*/
+	// Get uniform locations once
+	GLint useModelLoc = glGetUniformLocation(shader.ID, "useModel");
+	GLint useTextureLoc = glGetUniformLocation(shader.ID, "useTexture");
+	GLint useColorLoc = glGetUniformLocation(shader.ID, "useColor");
+	GLint uColorLoc = glGetUniformLocation(shader.ID, "uColor");
 
-
-	auto& registry = scene.GetRegistry(); // getter for the registry
-	registry.view<Transform, MeshComponent>().each([](auto entity, auto& transform, auto& mesh) {
-		});
-	// Iterate over all entities with MeshComponent and Transform
 	shader.use();
 	shader.setMat4("view", view);
 	shader.setMat4("projection", projection);
 
+	// Render MeshComponents
 	registry.view<MeshComponent, Transform>().each([&](auto entity, auto& meshComp, auto& transform) {
-		
-		if (scene.HasComponent<Camera>(entity))
-		{
-			Camera& cam = scene.GetComponent<Camera>(entity);
-		}
-		
-		
-		glm::mat4 model = glm::translate(glm::mat4(1.0f), transform.position);
-		model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-		model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-		model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0, 0, 1));
-		model = glm::scale(model, transform.scale);
+		// Skip if mesh is null
+		if (!meshComp.mesh) return;
 
-		glUniform1i(glGetUniformLocation(shader.ID, "useModel"), false);
-
+		// Build model matrix
+		glm::mat4 model = BuildModelMatrix(transform);
 		shader.setMat4("model", model);
 
-		//if no textures render color // just color
-		if (meshComp.mesh->mesh.textures.empty() && scene.HasComponent<Color>(entity))
-		{
-			glUniform1i(glGetUniformLocation(shader.ID, "useTexture"), false);
-			glUniform1i(glGetUniformLocation(shader.ID, "useColor"), true);
+		// Check for Color component once
+		bool hasColor = scene.HasComponent<Color>(entity);
+		bool hasTextures = !meshComp.mesh->mesh.textures.empty();
+
+		// Set uniform flags
+		glUniform1i(useModelLoc, 0); // Not a ModelComponent
+
+		if (!hasTextures && hasColor) {
+			// Only color, no textures
+			glUniform1i(useTextureLoc, 0);
+			glUniform1i(useColorLoc, 1);
 
 			auto& color = scene.GetComponent<Color>(entity);
-			glUniform4f(glGetUniformLocation(shader.ID, "uColor"),
-				color.value.r, color.value.g, color.value.b, color.value.a);
+			glUniform4f(uColorLoc,
+				color.value.r, color.value.g,
+				color.value.b, color.value.a);
 		}
-		else
-		{
-			if (scene.HasComponent<Color>(entity))
-			{
-				glUniform1i(glGetUniformLocation(shader.ID, "useTexture"), true);
-				glUniform1i(glGetUniformLocation(shader.ID, "useColor"), true);
+		else if (hasTextures) {
+			// Has textures, may have color
+			glUniform1i(useTextureLoc, 1);
+			glUniform1i(useColorLoc, hasColor ? 1 : 0);
 
+			if (hasColor) {
 				auto& color = scene.GetComponent<Color>(entity);
-				glUniform4f(glGetUniformLocation(shader.ID, "uColor"),
-					color.value.r, color.value.g, color.value.b, color.value.a);
-			}
-			else
-			{
-				glUniform1i(glGetUniformLocation(shader.ID, "useTexture"), true);
-				glUniform1i(glGetUniformLocation(shader.ID, "useColor"), false);
+				glUniform4f(uColorLoc,
+					color.value.r, color.value.g,
+					color.value.b, color.value.a);
 			}
 		}
-
-
-
-
-		if (meshComp.mesh) meshComp.mesh->Draw(shader);
-
-		});
-
-
-	registry.view<ModelComponent, Transform>().each([&](auto entity, ModelComponent& meshComp, auto& transform) {
-
-
-		glUniform1i(glGetUniformLocation(shader.ID, "useModel"), true);
-
-		//Model* model = meshComp.model.get()->GetModel().get();
-		//model->Draw(shader);
-		if (meshComp.model.get()->IsLoaded())
-		{
-			glm::mat4 model = glm::translate(glm::mat4(1.0f), transform.position);
-			model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-			model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-			model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0, 0, 1));
-			model = glm::scale(model, transform.scale);
-			glUniform1i(glGetUniformLocation(shader.ID, "useModel"), true);
-
-			shader.setMat4("model", model);
-			meshComp.model.get()->Draw(shader);
-		
+		else {
+			// No textures, no color
+			glUniform1i(useTextureLoc, 0);
+			glUniform1i(useColorLoc, 0);
 		}
+
+		meshComp.mesh->Draw(shader);
 		});
+
+	// Render ModelComponents
+	registry.view<ModelComponent, Transform>().each([&](auto entity, ModelComponent& modelComp, auto& transform) {
+		// Skip if not loaded
+		if (!modelComp.model.get()->IsLoaded()) return;
+
+		glm::mat4 model = BuildModelMatrix(transform);
+		shader.setMat4("model", model);
+
+		glUniform1i(useModelLoc, 1);
+		modelComp.model.get()->Draw(shader);
+		});
+
+	// Render Gizmo if needed (consider separating this into its own function)
+	RenderGizmo(scene, shader);
+}
+
+// Helper function for building model matrices
+glm::mat4 Renderer::BuildModelMatrix(const Transform& transform)
+{
+	glm::mat4 model = glm::translate(glm::mat4(1.0f), transform.position);
+	model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+	model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
+	model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0, 0, 1));
+	model = glm::scale(model, transform.scale);
+	return model;
+}
+
+// Separate function for gizmo rendering
+void Renderer::RenderGizmo(Scene& scene, Shader& shader)
+{
+	if (!pixel.ObjectID) return;
 
 	entt::entity clickedEntity = static_cast<entt::entity>(pixel.ObjectID);
-	if (pixel.ObjectID)
-	{
-		glViewport(0, 0, width, height);
 
+	if (scene.HasComponent<Transform>(clickedEntity)) {
+		// Setup ImGuizmo
+		glViewport(0, 0, width, height);
 		ImGuizmo::SetOrthographic(false);
 		ImGuizmo::SetDrawlist();
 
 		float windowHeight = ImGui::GetWindowHeight();
 		float windowWidth = ImGui::GetWindowWidth();
-		ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+		ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+			windowWidth, windowHeight);
 
 		auto& camera = scene.GetCamera();
-
 		glm::mat4 cameraView = camera.GetViewMatrix();
-		glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
+		glm::mat4 projection = glm::perspective(
+			glm::radians(45.0f),
+			static_cast<float>(width) / static_cast<float>(height),
+			0.1f, 100.0f
+		);
 
-		if (scene.HasComponent<Transform>(clickedEntity))
-		{
-			auto& transform = scene.GetComponent<Transform>(clickedEntity);
+		auto& transform = scene.GetComponent<Transform>(clickedEntity);
+		glm::mat4 model = BuildModelMatrix(transform);
 
-			// Convert rotation from degrees to radians
-			glm::vec3 rotationRad = glm::radians(transform.rotation);
+		ImGuizmo::Manipulate(
+			glm::value_ptr(cameraView),
+			glm::value_ptr(projection),
+			gizmoType,
+			ImGuizmo::MODE::LOCAL,
+			glm::value_ptr(model)
+		);
 
-			glm::mat4 model(1.0f);
-			model = glm::translate(model, transform.position);
-			model = glm::rotate(model, rotationRad.x, glm::vec3(1, 0, 0));
-			model = glm::rotate(model, rotationRad.y, glm::vec3(0, 1, 0));
-			model = glm::rotate(model, rotationRad.z, glm::vec3(0, 0, 1));
-			model = glm::scale(model, transform.scale);
-
-			ImGuizmo::Manipulate(glm::value_ptr(cameraView), glm::value_ptr(projection),
-				gizmoType, ImGuizmo::MODE::LOCAL, glm::value_ptr(model));
-
-			if (ImGuizmo::IsUsing())
-			{
-				
-
-				transform.SetFromMatrix(model);
-
-				// Ensure rotation is converted back to degrees if SetFromMatrix updates rotation in radians
-			}
+		if (ImGuizmo::IsUsing()) {
+			transform.SetFromMatrix(model);
 		}
-
-
-
 	}
-
-
 }
-
 
 GLuint Renderer::CompileShader(const std::string& source, GLenum type)
 {

@@ -23,6 +23,8 @@ public:
     void DrawTriangle();
     void DrawTriangle(const glm::vec3& color);
     void RenderScene(Scene&,Shader& );
+    void RenderGizmo(Scene& scene, Shader& shader);
+    glm::mat4 BuildModelMatrix(const Transform& transform);
 
     void RenderPicking(Scene&,int,int);
     void HandlePickingClick(Scene& scene, double mouseX, double mouseY,entt::entity&);
