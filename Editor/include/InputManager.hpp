@@ -7,10 +7,10 @@ public:
 	InputManager();
 	~InputManager() = default;
 
-	// Call every frame to update input state
+	
 	void Update();
 	void setWindow(GLFWwindow* window) { m_Window = window; }
-	// Query functions
+	
 	bool IsKeyPressed(int key) const;
 	bool IsMouseButtonPressed(int button) const;
 	void GetMousePosition(double& x, double& y) const;

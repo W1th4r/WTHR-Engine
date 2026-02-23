@@ -10,29 +10,22 @@ public:
     PhysicsWorld(Scene*);
     ~PhysicsWorld();
 
-    // --- Simulation ---
     void stepSimulation(float fixedDeltaTime);
     void SetScene(Scene* scene);
 
-    // --- Rigid body management ---
     RigidBody createRigidBody(const RigidBodyDesc& desc);
     void destroyRigidBody(RigidBodyID id);
     RigidBody* getRigidBody(RigidBodyID id);
 
-    // --- Collider (shape) management ---
     Collider createCollider(const ColliderDesc& desc);
     void attachCollider(RigidBodyID body, ColliderID collider);
     void detachCollider(RigidBodyID body, ColliderID collider);
 
-    // --- Events ---
     void setCollisionCallback(CollisionCallback cb);
     void setTriggerCallback(TriggerCallback cb);
 
 private:
-    // --- Internal modules (subsystems) ---
-   // Broadphase           m_broadphase;
-   // Narrowphase          m_narrowphase;
-   // ConstraintSolver     m_solver;
+
 
     void detectCollision();
 

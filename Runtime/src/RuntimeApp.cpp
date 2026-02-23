@@ -10,13 +10,11 @@ RuntimeApp::RuntimeApp(std::string name) {
 void RuntimeApp::Init() {
 	spdlog::info("Initializing RuntimeApp");
 
-	// Create window
 	m_Window = std::make_shared<Window>(1920, 1080, "WTHR Runtime");
 
 	// Create scene and pass the native GLFW window to it
 	m_Scene = std::make_shared<Scene>(m_Window->GetNativeWindow());
 
-	// Optionally create some test cubes
 	//m_Scene->CreateCubeGrid(2, 2, 2, glm::vec3(0.f));
 
 	m_Scene->Load("Default.sce");
@@ -59,7 +57,7 @@ void RuntimeApp::Run() {
 
 
 		// TODO: call your Scene's render functions here
-		// For now, we can step the worker to load models asynchronously
+		//TODO: automate scene loading and input scene into binary
 		m_Renderer->RenderScene(*m_Scene.get(), *ptrShdr);
 
 		// Swap buffers

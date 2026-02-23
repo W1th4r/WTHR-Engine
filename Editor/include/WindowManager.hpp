@@ -8,11 +8,11 @@ public:
     WindowManager(int width = 5, int height = 5, const char* title = "WTHR Engine");
     ~WindowManager();
 
-    // Initialization & shutdown
+  
     bool Init();
     void Shutdown();
 
-    // Main loop helpers
+  
     void PollEvents();
     void SwapBuffers();
     bool ShouldClose() const;
@@ -20,7 +20,7 @@ public:
     void BeginFrame();
     void EndFrame();
 
-    // Getters & setters
+  
      int GetWidth()  { return m_Width; }
      int GetHeight()  { return m_Height; }
     const char* GetTitle() const { return m_Title; }

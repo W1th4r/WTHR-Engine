@@ -23,30 +23,24 @@ void PhysicsWorld::stepSimulation(float fixedDeltaTime)
 	entt::registry& reg = m_Scene->GetRegistry();
 	reg.view<RigidBody, Transform>().each([&](entt::entity entity, RigidBody& body, Transform& transform) {
 
-		// Apply gravity if dynamic and enabled
 		if (!body.isKinematic && body.useGravity) {
 			body.velocity.y += gravity * fixedDeltaTime;
 		}
 
-		// Update position
 		body.position += body.velocity * fixedDeltaTime;
 
-		// Clamp Y so object doesn't fall below -5
 		if (body.position.y < -5.0f) {
 			body.position.y = -5.0f;
 
-			// Optional: zero velocity when hitting the floor
 			if (body.velocity.y < 0.0f) {
 				body.velocity.y = 0.0f;
 			}
 		}
 
-		// Kinematic movement logic (if any)
 		if (body.isKinematic) {
 			// body.position = yourManualMovementFunction(entity);
 		}
 
-		// Sync transform
 		transform.position = body.position;
 		});
 

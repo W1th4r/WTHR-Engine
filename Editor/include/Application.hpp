@@ -17,8 +17,8 @@ public:
 
 	static bool isFocused;
 protected:
-	virtual void Update();   // ECS, input, editor logic
-	virtual void Render();   // Delegate to Renderer library
+	virtual void Update();  
+	virtual void Render();  
 
 	void InitEngineSystems();
 	void InitImGui();

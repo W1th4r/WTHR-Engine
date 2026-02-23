@@ -47,7 +47,8 @@ public:
 				}
 				});
 			if (foundCamera) return *foundCamera;
-			throw std::runtime_error("No camera found for the selected type");
+			//throw std::runtime_error("No camera found for the selected type");
+			return m_Camera;
 			break;
 		case CameraType::Editor:
 			return m_Camera;
