@@ -6,7 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <ScriptEditor.hpp>
 
-Renderer::Renderer() 
+Renderer::Renderer()
 {
 	width = 1920;
 	height = 1080;
@@ -44,7 +44,6 @@ void Renderer::Init()
 	glBindVertexArray(0);
 
 	// Compile shaders
-	CreateShaderProgram();
 	spdlog::info("Renderer initialized");
 
 	pickingShader = Shader("shaders/picking.vert", "shaders/picking.frag");
@@ -57,26 +56,6 @@ void Renderer::Clear(const glm::vec3& color)
 {
 	glClearColor(color.r, color.g, color.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-void Renderer::DrawTriangle()
-{
-	glUseProgram(m_ShaderProgram);
-	glBindVertexArray(m_VAO);
-	glDrawArrays(GL_TRIANGLES, 0, 3);
-	glBindVertexArray(0);
-}
-void Renderer::DrawTriangle(const glm::vec3& color)
-{
-	glUseProgram(m_ShaderProgram);
-
-	// Set uniform
-	GLint loc = glGetUniformLocation(m_ShaderProgram, "u_Color");
-	glUniform3f(loc, color.r, color.g, color.b);
-
-	glBindVertexArray(m_VAO);
-	glDrawArrays(GL_TRIANGLES, 0, 3);
-	glBindVertexArray(0);
 }
 
 void Renderer::RenderScene(Scene& scene, Shader& shader)
@@ -149,8 +128,14 @@ void Renderer::RenderScene(Scene& scene, Shader& shader)
 			glUniform1i(useTextureLoc, 0);
 			glUniform1i(useColorLoc, 0);
 		}
-
-		meshComp.mesh->Draw(shader);
+		//if the entity has a camera it's a player so don't render it
+		if (scene.HasComponent<Camera>(entity))
+		{
+			auto& camera = scene.GetComponent<Camera>(entity);
+			camera.Position = transform.position;
+		}
+		else
+			meshComp.mesh->Draw(shader);
 		});
 
 	// Render ModelComponents
@@ -223,70 +208,6 @@ void Renderer::RenderGizmo(Scene& scene, Shader& shader)
 	}
 }
 
-GLuint Renderer::CompileShader(const std::string& source, GLenum type)
-{
-	GLuint shader = glCreateShader(type);
-	const char* src = source.c_str();
-	glShaderSource(shader, 1, &src, nullptr);
-	glCompileShader(shader);
-
-	int success;
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-	if (!success)
-	{
-		char info[512];
-		glGetShaderInfoLog(shader, 512, nullptr, info);
-		spdlog::error("Shader compilation failed: {}", info);
-	}
-	return shader;
-}
-
-void Renderer::CreateShaderProgram()
-{
-	const std::string vertexShader = R"(
-        #version 460 core
-        layout(location = 0) in vec3 aPos;
-        layout(location = 1) in vec3 aColor;
-        out vec3 vColor;
-        void main()
-        {
-            vColor = aColor;
-            gl_Position = vec4(aPos, 1.0);
-        }
-    )";
-
-	const std::string fragmentShader = R"(
-        #version 460 core
-        in vec3 vColor;
-        uniform vec3 u_Color; // ImGui-controlled color
-        out vec4 FragColor;
-        void main()
-        {
-            FragColor = vec4(u_Color * vColor, 1.0);
-        }
-    )";
-
-	GLuint vs = CompileShader(vertexShader, GL_VERTEX_SHADER);
-	GLuint fs = CompileShader(fragmentShader, GL_FRAGMENT_SHADER);
-
-	m_ShaderProgram = glCreateProgram();
-	glAttachShader(m_ShaderProgram, vs);
-	glAttachShader(m_ShaderProgram, fs);
-	glLinkProgram(m_ShaderProgram);
-
-	int success;
-	glGetProgramiv(m_ShaderProgram, GL_LINK_STATUS, &success);
-	if (!success)
-	{
-		char info[512];
-		glGetProgramInfoLog(m_ShaderProgram, 512, nullptr, info);
-		spdlog::error("Shader linking failed: {}", info);
-	}
-
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-}
-
 void Renderer::RenderPicking(Scene& scene, int x, int y)
 {
 	static bool framebufferInitialized = false;
@@ -302,7 +223,7 @@ void Renderer::RenderPicking(Scene& scene, int x, int y)
 
 	// --- Bind and clear picking framebuffer ---
 	m_ObjectPicking.Bind();
-	glViewport(0, 0, width,height);
+	glViewport(0, 0, width, height);
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -364,7 +285,7 @@ void Renderer::RenderPicking(Scene& scene, int x, int y)
 }
 
 
-void Renderer::HandlePickingClick(Scene& scene, double mouseX, double mouseY,entt::entity& picked)
+void Renderer::HandlePickingClick(Scene& scene, double mouseX, double mouseY, entt::entity& picked)
 {
 	// 1. Read pixel info from picking framebuffer
 	pixel = m_ObjectPicking.ReadPixel(
@@ -418,7 +339,7 @@ void Renderer::HandlePickingClick(Scene& scene, double mouseX, double mouseY,ent
 		highlightShader.setMat4("WVP", wvp);
 
 		if (reg.any_of<MeshComponent>(clickedEntity))
-		
+
 		{
 
 		}

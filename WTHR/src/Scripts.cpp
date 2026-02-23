@@ -25,6 +25,15 @@ Script::Script() {
         if (printCallback) printCallback(output);
         else std::cout << output << "\n";
         });
+    lua.set_function("IsKeyPressed", [](int keycode) {
+        return glfwGetKey(glfwGetCurrentContext(), keycode) == GLFW_PRESS;
+        });
+    lua.set("KEY_W", GLFW_KEY_W);
+    lua.set("KEY_A", GLFW_KEY_A);
+    lua.set("KEY_S", GLFW_KEY_S);
+    lua.set("KEY_D", GLFW_KEY_D);
+    lua.set("KEY_UP", GLFW_KEY_UP);
+    lua.set("KEY_DOWN", GLFW_KEY_DOWN);
 }
 
 Script::~Script() {

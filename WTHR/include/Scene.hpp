@@ -22,9 +22,6 @@ public:
 	{
 		spdlog::set_level(spdlog::level::debug);
 		spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
-
-
-
 	}
 	void print_transform(const Transform& t) {
 		std::cout << "Position: (" << t.position.x << ", " << t.position.y << ", " << t.position.z << ")\n";
@@ -42,7 +39,7 @@ public:
 			m_Registry.view<Camera>().each([&](auto entity, Camera& camera) {
 				// Here, decide which camera is the player camera
 				// For example, check if this entity has PlayerController
-				if (m_Registry.any_of<PlayerController>(entity)) {
+				if (m_Registry.any_of<Camera>(entity)) {
 					foundCamera = &camera;
 				}
 				});

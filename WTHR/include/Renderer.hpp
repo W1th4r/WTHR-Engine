@@ -20,8 +20,6 @@ public:
 
     void Init();
     void Clear(const glm::vec3& color = { 0.1f, 0.1f, 0.1f });
-    void DrawTriangle();
-    void DrawTriangle(const glm::vec3& color);
     void RenderScene(Scene&,Shader& );
     void RenderGizmo(Scene& scene, Shader& shader);
     glm::mat4 BuildModelMatrix(const Transform& transform);
@@ -41,6 +39,4 @@ private:
 
     float width, height;
     Shader pickingShader;
-    GLuint CompileShader(const std::string& source, GLenum type);
-    void CreateShaderProgram();
 };

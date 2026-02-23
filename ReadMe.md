@@ -9,6 +9,7 @@ A personal hobby project exploring C++ engine development. This is a sandbox for
 <p align="center">
   <img src="assets/preview/editor_demo.png" width="48%" alt="Editor View" />
   <img src="assets/preview/demo.png" width="48%" alt="Manipulating Entities" />
+  <img src="assets/preview/lua_scripting_demo.gif" width="48%" alt="Lua Scripting in Action" />
 </p>
 
 ---

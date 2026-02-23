@@ -82,18 +82,7 @@ std::string load_file(const std::string& path) {
 	return ss.str();
 }
 
-#include <imgui.h>
-#include <string>
-#include <functional>
-
 int nextGroupId = 0; // keep track somewhere in your editor state
-void ShowTwoNumberModal(const char* title, const char* label1, int& a, const char* label2, int& b, std::function<void()> onOk = nullptr)
-{
-
-
-
-}
-
 void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 {
 
@@ -202,6 +191,28 @@ void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 		}
 
 
+		if (registry.any_of<Camera>(e))
+		{
+			ImGui::Text("Camera");
+			ImGui::SliderFloat3("Camera", &registry.get<Camera>(e).Position.x,0,100);
+			if (ImGui::Button("Remove Camera"))
+			{
+				registry.remove<Camera>(e);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Switch to Camera"))
+			{
+				scene.setCameraType(CameraType::Player);
+			}
+
+		}
+		else if (ImGui::Button("Add Camera"))
+		{
+			registry.emplace<Camera>(e, glm::vec4(0.f));
+		}
+
+
+
 
 
 		if (registry.any_of<RigidBody>(e))
@@ -291,22 +302,6 @@ void Application::Run()
 
 
 	GLFWwindow* contextA = m_WindowManager.GetWindow();
-	//if (CheckSharedContextThreads(contextA, workerWindow,scene.gpuWorker.GetThread()))
-	//{
-	//	spdlog::info("Contextes are shared");
-	//}
-	//else
-	//{
-	//	spdlog::error("Contextes are NOT shared");
-
-	//}
-	//std::shared_ptr<Shapes::Cube> ptrCube = std::make_shared<Shapes::Cube>();
-	//std::shared_ptr<Shapes::Pyramid>  ptrPyramid = std::make_shared<Shapes::Pyramid>();
-
-	//Texture texture("texture.png","texture_diffuse");
-	//ptrCube.get()->mesh.textures.push_back(texture);
-	//ptrPyramid.get()->mesh.textures.push_back(texture);
-
 	auto ptrShdr = std::make_shared<Shader>("shaders/default.vert", "shaders/default.frag");
 
 
@@ -384,33 +379,6 @@ void Application::Run()
 			if (glfwGetKey(m_WindowManager.GetWindow(), GLFW_KEY_D) == GLFW_PRESS)
 				scene.GetCamera().ProcessKeyboard(RIGHT, deltaTime);
 		}
-		else
-		{
-
-			if (glfwGetKey(m_WindowManager.GetWindow(), GLFW_KEY_W) == GLFW_PRESS)
-				scene.GetCamera().ProcessKeyboard_Player(FORWARD, deltaTime);
-			if (glfwGetKey(m_WindowManager.GetWindow(), GLFW_KEY_S) == GLFW_PRESS)
-				scene.GetCamera().ProcessKeyboard_Player(BACKWARD, deltaTime);
-			if (glfwGetKey(m_WindowManager.GetWindow(), GLFW_KEY_A) == GLFW_PRESS)
-				scene.GetCamera().ProcessKeyboard_Player(LEFT, deltaTime);
-			if (glfwGetKey(m_WindowManager.GetWindow(), GLFW_KEY_D) == GLFW_PRESS)
-				scene.GetCamera().ProcessKeyboard_Player(RIGHT, deltaTime);
-
-			registry.view<Camera, Transform>().each([&](entt::entity, Camera& cam, Transform& trans)
-				{
-
-					cam.Position.y -= 1.5f;
-					trans.position = cam.Position;
-					cam.Position.y += 1.5f;
-
-				});
-
-
-
-
-
-		}
-
 
 		std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
@@ -504,12 +472,6 @@ void Application::Run()
 
 		if (ImGui::TreeNode("Scene Hierarchy"))
 		{
-
-
-
-
-
-
 			std::unordered_map<int, std::vector<entt::entity>> groups;
 
 			// Collect group members
@@ -826,7 +788,7 @@ void Application::Run()
 			if (m_Input.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
 			{
 				//shoot bullet
-				scene.CreateBullet();
+			//	scene.CreateBullet();
 			}
 		}
 
