@@ -317,6 +317,8 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer,
 	m_Renderer = &p_Renderer;
 	m_Input = &p_Input;
 	m_WindowManager = &p_WindowManagar;
+
+	m_Editor.SetScene(m_ActiveScene);
 }
 void AppUI::NewFrame()
 {
@@ -325,12 +327,38 @@ void AppUI::NewFrame()
 static 	entt::entity ent;
 void AppUI::Update()
 {
+
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
+
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->Pos);
+	ImGui::SetNextWindowSize(viewport->Size);
+	ImGui::SetNextWindowViewport(viewport->ID);
+
+	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // transparent background
+
+
+
+	// Start full-screen dockspace host window
+	ImGui::Begin("DockSpace Window", nullptr, window_flags);
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
+
+	// Create the actual DockSpace
+	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+
+
 	extern std::chrono::steady_clock::time_point lastFrame;
 	auto currentFrame = std::chrono::high_resolution_clock::now();
 	float deltaTime = std::chrono::duration<float>(currentFrame - lastFrame).count();
 
-	ImGuiIO& io = ImGui::GetIO();
-	io.DeltaTime = deltaTime;
 	auto& registry = m_ActiveScene->GetRegistry();
 
 
@@ -448,6 +476,101 @@ void AppUI::Update()
 		glfwSetInputMode(m_WindowManager->GetWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
+	
+
+
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoBringToFrontOnFocus |
+		ImGuiWindowFlags_NoBackground;
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
+	ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size);
+
+	ImGui::Begin("GizmoOverlay", nullptr, flags);
+
+	if (ImGui::BeginPopupContextWindow("Context"))
+	{
+		if (ImGui::BeginMenu("Spawn"))
+		{
+			if (ImGui::BeginMenu("Shapes"))
+			{
+				if (ImGui::BeginMenu("Cube"))
+				{
+					if (ImGui::MenuItem("Single")) m_ActiveScene->CreateCube();
+					if (ImGui::MenuItem("Grid 10x10x10")) m_ActiveScene->CreateCubeGrid(10, 10, 10);
+					if (ImGui::MenuItem("Grid 10x10x1")) m_ActiveScene->CreateCubeGrid(10, 1, 10);
+
+					ImGui::EndMenu();
+				}
+
+				if (ImGui::BeginMenu("Sphere"))
+				{
+					if (ImGui::MenuItem("Single")) m_ActiveScene->CreateSphere();
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Entities"))
+			{
+				if (ImGui::MenuItem("Player")) m_ActiveScene->CreatePlayer();
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndPopup();
+	}
+
+	const char* label = "Play";
+
+	// Get the current window size
+	ImVec2 windowSize = ImGui::GetContentRegionAvail(); // available size in the window
+
+	// Calculate the size of the button
+	ImVec2 buttonSize = ImVec2(100, 0); // width 100, height 0 (automatic)
+
+	// Set cursor X to center the button
+	ImGui::SetCursorPosX((windowSize.x - buttonSize.x) * 0.5f);
+
+	// Optional: center vertically in remaining space
+	// ImGui::SetCursorPosY((windowSize.y - buttonSize.y) * 0.5f);
+
+	// Draw button
+	if (ImGui::Button("Play", buttonSize)) {
+		//Iterate all scritps and start
+	
+		m_Editor.Play();
+
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Stop", buttonSize)) {
+		
+		m_Editor.Stop();
+
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Pause", buttonSize)) {
+
+		m_Editor.Pause();
+
+	}
+	if (ImGui::Button("\uf04b")) { /* Play */ }
+	ImGui::SameLine();
+	if (ImGui::Button("\uf04c")) { /* Pause */ }
+	ImGui::SameLine();
+	if (ImGui::Button("\uf04d")) { /* Stop */ }
+
+
+
+
+
 
 
 
@@ -455,32 +578,7 @@ void AppUI::Update()
 void AppUI::Render()
 {
 	auto& registry = m_ActiveScene->GetRegistry();
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
-
-	ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->Pos);
-	ImGui::SetNextWindowSize(viewport->Size);
-	ImGui::SetNextWindowViewport(viewport->ID);
-
-	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // transparent background
-
-
-
-	// Start full-screen dockspace host window
-	ImGui::Begin("DockSpace Window", nullptr, window_flags);
-	ImGui::PopStyleColor();
-	ImGui::PopStyleVar(2);
-
-	// Create the actual DockSpace
-	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-
+	
 
 	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 

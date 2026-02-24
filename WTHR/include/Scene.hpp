@@ -9,6 +9,8 @@
 #include "Model.hpp"
 #include <GLContextWorker.hpp>
 #include "Camera.hpp"
+#include <entt/entity/storage.hpp>
+#include <entt/entity/registry.hpp>
 
 enum class CameraType {
 	Player,
@@ -18,7 +20,11 @@ enum class CameraType {
 
 class Scene {
 public:
-	Scene() {}
+	Scene()
+	{
+		spdlog::set_level(spdlog::level::debug);
+		spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+	}
 	//Scene(GLFWwindow* window) : worker(window)
 	//{
 	//	spdlog::set_level(spdlog::level::debug);
@@ -132,7 +138,7 @@ public:
 		auto entity = m_Registry.create();
 		m_Registry.emplace<Transform>(entity, GetCamera().Position);
 		m_Registry.emplace<Color>(entity, glm::vec4(1.f));
-		m_Registry.emplace<Bullet>(entity, GetCamera().Position,GetCamera().Front,0.1f,true);
+		m_Registry.emplace<Bullet>(entity, GetCamera().Position, GetCamera().Front, 0.1f, true);
 		m_Registry.emplace<MeshComponent>(entity, std::make_shared<Shapes::Sphere>(0.1f, 36, 18));
 		return entity;
 	}
@@ -181,6 +187,47 @@ public:
 	T& AddComponent(entt::entity entity, Args&&... args) {
 		return m_Registry.emplace<T>(entity, std::forward<Args>(args)...);
 	}
+
+	entt::registry GetRegistrySnapshot() {
+		entt::registry snapshot; // This is the local "bucket" for your data
+
+		// Use YOUR registry to find the components
+		this->GetRegistry().view<MeshComponent, Transform>().each([&](auto entity, auto& mesh, auto& trans) {
+			// Create the entity in the SNAPSHOT, not a buffer
+			auto e = snapshot.create(entity);
+
+			// Copy the data into the SNAPSHOT
+			snapshot.emplace<MeshComponent>(e, mesh);
+			snapshot.emplace<Transform>(e, trans);
+			});
+
+		return snapshot; // Return the filled bucket
+	}
+	void SetRegistry(entt::registry& srcReg) // Pass by reference to avoid the 'deleted function' error
+	{
+		// 1. Wipe the current data to start fresh
+		this->m_Registry.clear();
+
+		// 2. We must recreate the entities first. 
+		// This ensures that when we call .each() later, the destination 
+		// registry actually has an entity to attach the components to.
+		for (auto entity : srcReg.storage<entt::entity>()) {
+			this->m_Registry.create(entity);
+		}
+
+		// 3. Your specific structure: View Mesh and Transform and copy them
+		srcReg.view<MeshComponent, Transform>().each([&](auto entity, auto& meshComp, auto& transform) {
+			// Skip if mesh is null (per your previous requirement)
+			if (!meshComp.mesh) return;
+
+			// Copy the data into this->m_Registry
+			// We use the same 'entity' ID because we mirrored them in step 2
+			this->m_Registry.emplace<MeshComponent>(entity, meshComp);
+			this->m_Registry.emplace<Transform>(entity, transform);
+			});
+	}
+
+
 	GLContextWorker* m_Worker;
 	Script m_Script;
 private:

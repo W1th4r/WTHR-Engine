@@ -9,7 +9,7 @@
 #include <entt/entt.hpp>
 
 struct ScriptInstance {
-    ScriptInstance() { isActive = true; }
+    ScriptInstance() { isActive = false; }
     std::string name;
     std::string code;
     sol::function onUpdate;       // called every frame

@@ -131,11 +131,6 @@ std::string load_file(const std::string& path) {
 	return ss.str();
 }
 
-
-
-
-
-
 auto lastFrame = std::chrono::high_resolution_clock::now();
 void Application::Run()
 {
@@ -162,107 +157,17 @@ void Application::Run()
 
 		m_World.stepSimulation(.016f);
 
-
-
 		m_WindowManager.PollEvents();
 		m_Input.Update();
 		m_WindowManager.BeginFrame();
 
 
-
 		m_UI.Update();
-
-
-
 		m_UI.Render();
-
-
 
 
 		m_Renderer.Clear();
 
-
-
-		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
-			ImGuiWindowFlags_NoResize |
-			ImGuiWindowFlags_NoScrollbar |
-			ImGuiWindowFlags_NoTitleBar |
-			ImGuiWindowFlags_NoBringToFrontOnFocus |
-			ImGuiWindowFlags_NoBackground;
-
-		ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
-		ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size);
-
-		ImGui::Begin("GizmoOverlay", nullptr, flags);
-
-		if (ImGui::BeginPopupContextWindow("Context"))
-		{
-			if (ImGui::BeginMenu("Spawn"))
-			{
-				if (ImGui::BeginMenu("Shapes"))
-				{
-					if (ImGui::BeginMenu("Cube"))
-					{
-						if (ImGui::MenuItem("Single")) m_ActiveScene.CreateCube();
-						if (ImGui::MenuItem("Grid 10x10x10")) m_ActiveScene.CreateCubeGrid(10, 10, 10);
-						if (ImGui::MenuItem("Grid 10x10x1")) m_ActiveScene.CreateCubeGrid(10, 1, 10);
-
-						ImGui::EndMenu();
-					}
-
-					if (ImGui::BeginMenu("Sphere"))
-					{
-						if (ImGui::MenuItem("Single")) m_ActiveScene.CreateSphere();
-						ImGui::EndMenu();
-					}
-
-					ImGui::EndMenu();
-				}
-
-				if (ImGui::BeginMenu("Entities"))
-				{
-					if (ImGui::MenuItem("Player")) m_ActiveScene.CreatePlayer();
-
-					ImGui::EndMenu();
-				}
-
-				ImGui::EndMenu();
-			}
-
-			ImGui::EndPopup();
-		}
-
-
-		const char* label = "Play";
-
-		// Get the current window size
-		ImVec2 windowSize = ImGui::GetContentRegionAvail(); // available size in the window
-
-		// Calculate the size of the button
-		ImVec2 buttonSize = ImVec2(100, 0); // width 100, height 0 (automatic)
-
-		// Set cursor X to center the button
-		ImGui::SetCursorPosX((windowSize.x - buttonSize.x) * 0.5f);
-
-		// Optional: center vertically in remaining space
-		// ImGui::SetCursorPosY((windowSize.y - buttonSize.y) * 0.5f);
-
-		// Draw button
-		if (ImGui::Button("Play", buttonSize)) {
-			for (auto& instance : m_ActiveScene.m_Script.scripts)
-			{
-				instance.second.isActive = true;
-			}
-
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Pause", buttonSize)) {
-			for (auto& instance : m_ActiveScene.m_Script.scripts)
-			{
-				instance.second.isActive = false;
-			}
-
-		}
 		ImGuizmo::SetDrawlist();
 		ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
 			ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);

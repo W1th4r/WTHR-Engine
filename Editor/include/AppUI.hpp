@@ -1,5 +1,6 @@
 #pragma once
 #include <imgui.h>
+#include "Editor.hpp"
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -50,5 +51,6 @@ private:
 	Renderer* m_Renderer;
 	InputManager* m_Input; 
 	WindowManager* m_WindowManager;
+	Editor m_Editor;
 
 };
