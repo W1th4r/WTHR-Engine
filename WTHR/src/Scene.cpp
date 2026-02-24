@@ -38,7 +38,7 @@ void Scene::Save(const std::filesystem::path& filepath)
 	//Scripts
 	json attachmentsJson = json::array();  // top-level array
 
-	for (auto& [entity, scripts] : script.objectScripts)
+	for (auto& [entity, scripts] : m_Script.objectScripts)
 	{
 		json entityJson;
 		entityJson["entity"] = entity;
@@ -61,7 +61,7 @@ void Scene::Save(const std::filesystem::path& filepath)
 
 
 	json scriptsJson;
-	for (auto& [filepath, script] : script.scripts)
+	for (auto& [filepath, script] : m_Script.scripts)
 	{
 		scriptsJson["Code"] = script.code;
 		scriptsJson["Name"] = script.name;
@@ -146,8 +146,8 @@ void Scene::Load(const std::filesystem::path& filepath)
 
 	m_Registry.clear(); // Remove existing entities
 	m_Textures.clear();
-	script.scripts.clear();
-	script.objectScripts.clear();
+	m_Script.scripts.clear();
+	m_Script.objectScripts.clear();
 
 
 
@@ -164,7 +164,7 @@ void Scene::Load(const std::filesystem::path& filepath)
 			auto string = scriptJson["Code"].get<std::string>();
 			code = string;
 		}
-		script.addScript(name, code);
+		m_Script.addScript(name, code);
 	}
 
 
@@ -259,7 +259,7 @@ void Scene::Load(const std::filesystem::path& filepath)
 			scripts.push_back(s.get<std::string>());
 		}
 
-		script.objectScripts[entity] = scripts;
+		m_Script.objectScripts[entity] = scripts;
 	}
 
 
@@ -322,6 +322,6 @@ void Scene::Load(const std::filesystem::path& filepath)
 
 	}
 
-	script.bindTransforms(m_Registry);
+	m_Script.bindTransforms(m_Registry);
 
 }

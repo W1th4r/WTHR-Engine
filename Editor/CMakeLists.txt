@@ -13,7 +13,7 @@ add_executable(Editor
     ${WTHR_HDR}
     src/pch.cpp      # precompiled header source
     include/pch.hpp  # precompiled header
-)
+ "src/Editor.cpp")
 
 # Include directories
 target_include_directories(Editor PUBLIC include)

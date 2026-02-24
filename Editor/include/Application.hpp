@@ -5,6 +5,7 @@
 #include <InputManager.hpp>
 #include <Renderer.hpp>
 #include <PhysicsWorld.hpp>
+#include <AppUI.hpp>
 
 class Application
 {
@@ -14,8 +15,10 @@ public:
 
 	bool Init();
 	void Run();
+	Scene& GetScene() { return m_ActiveScene; }
+	Renderer& GetRenderer() { return m_Renderer; }
 
-	static bool isFocused;
+	inline static bool isFocused = false;
 protected:
 	virtual void Update();  
 	virtual void Render();  
@@ -29,4 +32,6 @@ protected:
 	InputManager m_Input;
 	Renderer m_Renderer;
 	PhysicsWorld m_World;
+	AppUI m_UI;
+	Scene m_ActiveScene;
 };

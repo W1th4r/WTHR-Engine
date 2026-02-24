@@ -1,0 +1,908 @@
+#include "AppUI.hpp"
+#include "Renderer.hpp"
+#include "Scene.hpp"
+#include "InputManager.hpp"
+#include "WindowManager.hpp"
+#include "Application.hpp"
+#include <chrono>
+
+
+
+std::filesystem::path FileDialog::OpenFile()
+{
+	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (SUCCEEDED(hr))
+	{
+		IFileOpenDialog* pFileOpen;
+		std::filesystem::path path;
+		// Create the FileOpenDialog object
+		hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, CLSCTX_ALL,
+			__uuidof(IFileOpenDialog), reinterpret_cast<void**>(&pFileOpen));
+
+		if (SUCCEEDED(hr))
+		{
+			// Show the Open dialog box
+			hr = pFileOpen->Show(NULL);
+
+			if (SUCCEEDED(hr))
+			{
+				IShellItem* pItem;
+				// Get the selection from the dialog
+				hr = pFileOpen->GetResult(&pItem);
+
+				if (SUCCEEDED(hr))
+				{
+					PWSTR pszFilePath;
+					// Get the file path
+					hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+					if (SUCCEEDED(hr))
+					{
+						// Use the file path (example: print to console)
+						std::wcout << L"Selected File: " << pszFilePath << std::endl;
+						path = std::filesystem::path(pszFilePath);
+						CoTaskMemFree(pszFilePath); // Free the memory allocated for the path
+					}
+					pItem->Release(); // Release the item pointer
+				}
+			}
+			pFileOpen->Release(); // Release the dialog pointer
+		}
+		CoUninitialize(); // Uninitialize COM
+		return path;
+	}
+	return std::filesystem::path();
+}
+
+std::filesystem::path FileDialog::OpenFolder()
+{
+	std::filesystem::path resultPath;
+
+	// 1. Initialize COM (Necessary for Shell objects)
+	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (FAILED(hr)) return resultPath;
+
+	IFileOpenDialog* pFileOpen;
+
+	// 2. Create the FileOpenDialog object
+	hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+		IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+	if (SUCCEEDED(hr))
+	{
+		// 3. Set the options to "Pick Folders" instead of files
+		DWORD dwOptions;
+		if (SUCCEEDED(pFileOpen->GetOptions(&dwOptions)))
+		{
+			pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS);
+		}
+
+		// 4. Show the Dialog
+		hr = pFileOpen->Show(NULL);
+
+		// 5. Process the result if the user didn't hit cancel
+		if (SUCCEEDED(hr))
+		{
+			IShellItem* pItem;
+			hr = pFileOpen->GetResult(&pItem);
+			if (SUCCEEDED(hr))
+			{
+				PWSTR pszFilePath;
+				hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+				if (SUCCEEDED(hr))
+				{
+					resultPath = std::filesystem::path(pszFilePath);
+					CoTaskMemFree(pszFilePath); // Important: Free the COM string
+				}
+				pItem->Release();
+			}
+		}
+		pFileOpen->Release();
+	}
+
+	CoUninitialize();
+	return resultPath;
+}
+
+
+
+int nextGroupId = 0; // keep track somewhere in your editor state
+static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
+{
+
+	ImGuiTreeNodeFlags flags =
+		ImGuiTreeNodeFlags_Framed |
+		ImGuiTreeNodeFlags_OpenOnArrow |
+		ImGuiTreeNodeFlags_DrawLinesFull |
+		ImGuiTreeNodeFlags_DefaultOpen;
+
+	bool opened = ImGui::TreeNodeEx(
+		(void*)(uint32_t)e,
+		flags,
+		"Entity %u##%u", // visible text | unique ID
+		(uint32_t)e,     // visible number
+		(uint32_t)e      // unique ID after ##
+	);
+
+
+	if (opened)
+	{
+
+		auto& all_Textures = scene.GetTextures();
+
+		uint32_t entity = (uint32_t)e;
+		MeshComponent& meshComp = registry.get<MeshComponent>(e);
+
+		ImGui::Text("Textures");
+		if (ImGui::Button(("+ Texture##" + std::to_string((int)entity)).c_str()))
+		{
+			ImGui::OpenPopup(("Set Texture##" + std::to_string((int)entity)).c_str());
+		}
+		if (ImGui::BeginPopupModal(("Set Texture##" + std::to_string((int)entity)).c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			static char filepath[256] = "";
+			ImGui::InputText("File Path", filepath, IM_ARRAYSIZE(filepath));
+
+			if (ImGui::Button("Load"))
+			{
+				std::string targetFilename = std::filesystem::path(filepath).filename().string();
+				bool found = false;
+
+				// Iterate through the map to find a key whose filename matches our target
+				for (auto const& [absPath, textureObj] : all_Textures)
+				{
+					if (std::filesystem::path(absPath).filename().string() == targetFilename)
+					{
+
+						meshComp.mesh->mesh.textures.push_back(textureObj);
+						registry.emplace<Texture>(e);
+
+						found = true;
+						ImGui::CloseCurrentPopup();
+						break;
+					}
+				}
+
+				if (!found)
+				{
+					std::cout << "Texture filename not found: " << targetFilename << std::endl;
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				filepath[0] = '\0';
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+			ImGui::SameLine();
+		}
+		if (ImGui::Button(("- Texture##" + std::to_string((int)entity)).c_str()))
+		{
+			auto& vecTextures = meshComp.mesh->mesh.textures;
+			registry.remove<Texture>(e);
+			vecTextures.clear();
+		}
+		for (auto& texture : meshComp.mesh->mesh.textures)
+		{
+			// Loop through the map to find the matching Texture
+			for (auto& [name, tex] : all_Textures)
+			{
+				if (tex.id == texture.id) // assuming Texture has a unique 'id' or comparable field
+				{
+					ImGui::Bullet();
+					ImGui::Text("%s", name.c_str());
+					break; // stop after finding the first match
+				}
+			}
+		}
+		if (registry.any_of<Transform>(e))
+		{
+
+			ImGui::Text("Transforms");
+			ImGui::DragFloat3("Position", &registry.get<Transform>(e).position.x, 0.1f);
+			ImGui::DragFloat3("Scale", &registry.get<Transform>(e).scale.x, 0.1f);
+			ImGui::DragFloat3("Rotation", &registry.get<Transform>(e).rotation.x, 0.1f);
+		}
+		if (registry.any_of<Color>(e))
+		{
+			ImGui::Text("Color");
+			ImGui::ColorEdit4("RGB", &registry.get<Color>(e).value.r);
+			if (ImGui::Button("Remove Color"))
+			{
+				registry.remove<Color>(e);
+			}
+
+		}
+		else if (ImGui::Button("Add Color"))
+		{
+			registry.emplace<Color>(e, glm::vec4(0.f));
+		}
+
+
+		if (registry.any_of<Camera>(e))
+		{
+			ImGui::Text("Camera");
+			ImGui::SliderFloat3("Camera", &registry.get<Camera>(e).Position.x, 0, 100);
+			if (ImGui::Button("Remove Camera"))
+			{
+				registry.remove<Camera>(e);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Switch to Camera"))
+			{
+				scene.setCameraType(CameraType::Player);
+			}
+
+		}
+		else if (ImGui::Button("Add Camera"))
+		{
+			registry.emplace<Camera>(e, glm::vec4(0.f));
+		}
+
+
+
+
+
+		if (registry.any_of<RigidBody>(e))
+		{
+			ImGui::Text("RigidBody");
+			ImGui::DragFloat3("Position##rigidbody", &registry.get<RigidBody>(e).position.x, 0.01f, 0.0f, 1.0f);
+			ImGui::DragFloat3("Velocity", &registry.get<RigidBody>(e).velocity.x, 0.01f, 0.0f, 1.0f);
+			ImGui::Checkbox("IsKinematic", &registry.get<RigidBody>(e).isKinematic);
+			ImGui::Checkbox("useGravity", &registry.get<RigidBody>(e).useGravity);
+
+			if (ImGui::Button("Remove RigidBody"))
+			{
+				registry.remove<RigidBody>(e);
+			}
+		}
+		else if (ImGui::Button("Add RigidBody"))
+		{
+			auto trans = registry.get<Transform>(e).position;
+
+			registry.emplace<RigidBody>(e, RigidBodyDesc(trans));
+		}
+
+
+
+
+		if (registry.any_of<Collider>(e))
+		{
+			ImGui::Text("Collider");
+			ImGui::DragFloat3("Position##collider", &registry.get<Collider>(e).offset.x, 0.01f, 0.0f, 1.0f);
+			ImGui::DragFloat3("Size", &registry.get<Collider>(e).size.x, 0.01f, 0.0f, 1.0f);
+
+			if (ImGui::Button("Remove Collider"))
+			{
+				registry.remove<Collider>(e);
+			}
+		}
+		else if (ImGui::Button("Add Collider"))
+		{
+			registry.emplace<Collider>(e, ColliderDesc());
+		}
+
+
+
+
+
+
+
+
+
+		if (auto group = registry.try_get<GroupComponent>(e))
+		{
+			ImGui::InputInt("Group", &group->id);
+			if (group->id == -1)
+				registry.remove<GroupComponent>(e);
+		}
+		else if (ImGui::Button("Add group"))
+		{
+			registry.emplace<GroupComponent>(e, /* optional initial id */ 0);
+		}
+
+		ImGui::TreePop();
+	}
+}
+
+
+void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer,
+	InputManager& p_Input, WindowManager& p_WindowManagar)
+{
+	m_ActiveScene = &p_ActiveScene;
+	m_Renderer = &p_Renderer;
+	m_Input = &p_Input;
+	m_WindowManager = &p_WindowManagar;
+}
+void AppUI::NewFrame()
+{
+
+}
+static 	entt::entity ent;
+void AppUI::Update()
+{
+	extern std::chrono::steady_clock::time_point lastFrame;
+	auto currentFrame = std::chrono::high_resolution_clock::now();
+	float deltaTime = std::chrono::duration<float>(currentFrame - lastFrame).count();
+
+	ImGuiIO& io = ImGui::GetIO();
+	io.DeltaTime = deltaTime;
+	auto& registry = m_ActiveScene->GetRegistry();
+
+
+	if (m_ActiveScene->GetCameraType() == CameraType::Editor)
+	{
+
+		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_W) == GLFW_PRESS)
+			m_ActiveScene->GetCamera().ProcessKeyboard(FORWARD, deltaTime);
+		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_S) == GLFW_PRESS)
+			m_ActiveScene->GetCamera().ProcessKeyboard(BACKWARD, deltaTime);
+		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_A) == GLFW_PRESS)
+			m_ActiveScene->GetCamera().ProcessKeyboard(LEFT, deltaTime);
+		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_D) == GLFW_PRESS)
+			m_ActiveScene->GetCamera().ProcessKeyboard(RIGHT, deltaTime);
+	}
+
+
+	if (m_ActiveScene->GetCameraType() == CameraType::Editor)
+	{
+
+		if (m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		{
+			double x, y;
+			glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
+			m_Renderer->RenderPicking(*m_ActiveScene, x, y);
+		}
+
+		if (m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		{
+			double x, y;
+			glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
+			m_Renderer->HandlePickingClick(*m_ActiveScene, x, y, ent);
+		}
+	}
+	else if (m_ActiveScene->GetCameraType() == CameraType::Player)
+	{
+		if (m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		{
+			//shoot bullet
+		//	m_ActiveScene->CreateBullet();
+		}
+	}
+	static bool firstMouse = false;
+	static double lastX;
+	static double lastY;
+	if (m_Input->IsKeyPressed(GLFW_KEY_ESCAPE))
+	{
+		Application::isFocused = !Application::isFocused;
+
+		if (Application::isFocused)
+		{
+			double xpos, ypos;
+			glfwGetCursorPos(m_WindowManager->GetWindow(), &xpos, &ypos);
+			lastX = static_cast<float>(xpos);
+			lastY = static_cast<float>(ypos);
+			firstMouse = true; // reset to avoid huge jump
+		}
+	}
+
+
+
+	if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_Q) == GLFW_PRESS)
+	{
+		m_Renderer->gizmoType = ImGuizmo::OPERATION::TRANSLATE;
+	}
+	else if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_W) == GLFW_PRESS)
+	{
+		m_Renderer->gizmoType = ImGuizmo::OPERATION::ROTATE;
+	}
+	else if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_E) == GLFW_PRESS)
+	{
+		m_Renderer->gizmoType = ImGuizmo::OPERATION::SCALE;
+	}
+	else if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_R) == GLFW_PRESS)
+	{
+		m_Renderer->gizmoType = ImGuizmo::OPERATION::SCALEU; // uniform scale
+	}
+
+
+	if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_1) == GLFW_PRESS)
+	{
+		m_ActiveScene->setCameraType(CameraType::Editor);
+	}
+	else if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_2) == GLFW_PRESS)
+	{
+		m_ActiveScene->setCameraType(CameraType::Player);
+	}
+
+	if (Application::isFocused)
+	{
+		double xposIn, yposIn;
+		glfwGetCursorPos(m_WindowManager->GetWindow(), &xposIn, &yposIn);
+		float xpos = static_cast<float>(xposIn);
+		float ypos = static_cast<float>(yposIn);
+
+		if (firstMouse)
+		{
+			lastX = xpos;
+			lastY = ypos;
+			firstMouse = false;
+		}
+
+		float xoffset = xpos - lastX;
+		float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+		lastX = xpos;
+		lastY = ypos;
+
+		m_ActiveScene->GetCamera().ProcessMouseMovement(xoffset, yoffset);
+
+		glfwSetInputMode(m_WindowManager->GetWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
+	else
+	{
+		glfwSetInputMode(m_WindowManager->GetWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+
+
+
+
+}
+void AppUI::Render()
+{
+	auto& registry = m_ActiveScene->GetRegistry();
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
+
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->Pos);
+	ImGui::SetNextWindowSize(viewport->Size);
+	ImGui::SetNextWindowViewport(viewport->ID);
+
+	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // transparent background
+
+
+
+	// Start full-screen dockspace host window
+	ImGui::Begin("DockSpace Window", nullptr, window_flags);
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
+
+	// Create the actual DockSpace
+	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+
+
+	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
+
+	ImGui::Begin("ECS");
+	if (ImGui::Button("Save"))
+	{
+		m_ActiveScene->Save(path);
+	}
+
+	ImGui::SameLine(); // Put next button on the same row
+
+	if (ImGui::Button("Load"))
+	{
+		m_ActiveScene->Load(path);
+	}
+	ImGui::SameLine(); // Put next button on the same row
+
+	if (ImGui::Button("Clear"))
+	{
+		registry.clear();
+		registry = entt::registry();
+	}
+
+
+	ImGui::Separator();
+
+
+	if (ImGui::Button("+ Entity"))
+	{
+		m_ActiveScene->CreateCube();
+	}
+
+	ImGui::SameLine(); // Put next button on the same row
+
+	if (ImGui::Button("- Entity"))
+	{
+		if (registry.valid(ent)) // optional: check if entity is valid
+		{
+			registry.destroy(ent); // deletes the entity and all its components
+			ent = entt::null;     // reset your selected entity if needed
+		}
+	}
+	// Persistent state
+	static int a = 0, b = 0;
+	static int nextGroupId = 0;
+
+	if (ImGui::Button("Group"))
+	{
+		ImGui::OpenPopup("Group what"); // <-- open once when button is clicked
+	}
+
+	// Now draw the modal outside the button
+	if (ImGui::BeginPopupModal("Group what", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		// Input numbers
+		ImGui::InputInt("From", &a);
+		ImGui::InputInt("To", &b);
+
+		// Buttons
+		if (ImGui::Button("OK", ImVec2(120, 0)))
+		{
+			if (a > b) std::swap(a, b);
+			int groupId = nextGroupId++;
+
+			// Assign entities in range [a,b] to the group
+			registry.view<MeshComponent>().each([&](auto e, MeshComponent& mesh) {
+				uint32_t id = (uint32_t)e;
+				if (id >= a && id <= b)
+				{
+					if (registry.any_of<GroupComponent>(e))
+						registry.get<GroupComponent>(e).id = groupId;
+					else
+						registry.emplace<GroupComponent>(e, groupId);
+				}
+				});
+
+			ImGui::CloseCurrentPopup(); // close modal
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
+
+
+	ImGui::Separator();
+
+
+	if (ImGui::TreeNode("Scene Hierarchy"))
+	{
+		std::unordered_map<int, std::vector<entt::entity>> groups;
+
+		// Collect group members
+		registry.view<GroupComponent>().each([&](auto e, auto& g) {
+			groups[g.id].push_back(e);
+			});
+
+		// Draw groups
+		for (auto& [groupId, members] : groups)
+		{
+			ImGuiTreeNodeFlags groupFlags =
+				ImGuiTreeNodeFlags_DefaultOpen |
+				ImGuiTreeNodeFlags_DrawLinesFull |
+				ImGuiTreeNodeFlags_SpanAvailWidth |
+				ImGuiTreeNodeFlags_OpenOnArrow |
+				ImGuiTreeNodeFlags_OpenOnDoubleClick;
+
+			bool groupOpened = ImGui::TreeNodeEx(
+				(void*)(intptr_t)(groupId + 0x100000), // offset to differentiate groups
+				groupFlags,
+				"Group##%u",
+				groupId
+			);
+			if (groupOpened)
+			{
+
+				// Ensure it has the components
+				// Draw ImGui sliders for the master
+				static RigidBody rb = (RigidBodyDesc());
+				static Collider col = (ColliderDesc());
+				static Color color = Color(glm::vec4(1.f));
+				static Transform trans;
+
+				// Check if any member is missing a component
+				bool anyMissingRigidBody = false;
+				bool anyMissingCollider = false;
+				bool anyMissingColor = false;
+
+				for (auto e : members)
+				{
+					if (!registry.any_of<RigidBody>(e)) anyMissingRigidBody = true;
+					if (!registry.any_of<Collider>(e)) anyMissingCollider = true;
+					if (!registry.any_of<Color>(e)) anyMissingColor = true;
+				}
+
+				// Render buttons if something is missing
+				if (anyMissingRigidBody && ImGui::Button("Add RigidBody to missing members"))
+				{
+					for (auto e : members)
+					{
+						if (!registry.any_of<RigidBody>(e))
+						{
+							registry.emplace<RigidBody>(e, RigidBodyDesc(registry.get<Transform>(e).position)); // use current group master values
+
+						}
+					}
+				}
+
+				if (anyMissingCollider && ImGui::Button("Add Collider to missing members"))
+				{
+					for (auto e : members)
+					{
+						if (!registry.any_of<Collider>(e))
+							registry.emplace<Collider>(e, col); // use current group master values
+					}
+				}
+				if (anyMissingColor && ImGui::Button("Add Color to missing members"))
+				{
+					for (auto e : members)
+					{
+						if (!registry.any_of<Color>(e))
+							registry.emplace<Color>(e, color); // use current group master values
+					}
+				}
+
+				// Draw sliders for group master values
+				ImGui::Checkbox("useGravity", &rb.useGravity);
+				ImGui::Checkbox("isKinematic", &rb.isKinematic);
+				ImGui::SliderFloat3("Position", &trans.position.x, -1.f, 1.f);
+				ImGui::ColorEdit4("Color", &color.value.r);
+				//	ImGui::DragFloat3("Group RigidBody", &rb.position.x, 0.1f);
+				//	ImGui::DragFloat3("Group Collider", &col.size.x, 0.1f);
+
+					// Propagate to all members that already have the components
+				static Transform lastT;
+
+				for (auto e : members)
+				{
+					if (registry.any_of<Transform>(e))
+					{
+						if (lastT.position != trans.position)
+						{
+
+							registry.get<Transform>(e).position = registry.get<Transform>(e).position + trans.position;
+
+						}
+					}
+					if (registry.any_of<RigidBody>(e))
+					{
+						registry.get<RigidBody>(e).useGravity = rb.useGravity;
+					}
+					if (registry.any_of<Color>(e))
+					{
+						registry.get<Color>(e).value = color.value;
+					}
+
+					if (registry.any_of<Collider>(e))
+					{
+
+					}
+				}
+				lastT = trans;
+
+				// Draw members WITHOUT indentation
+				ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
+
+
+				for (auto e : members)
+					DrawEntity(registry, e, *m_ActiveScene);
+
+				ImGui::PopStyleColor(3);
+
+				ImGui::TreePop();
+			}
+		}
+
+		// Draw entities without a group (no indentation)
+		registry.view<MeshComponent>(entt::exclude<GroupComponent>).each([&](auto e, MeshComponent& mesh) {
+			DrawEntity(registry, e, *m_ActiveScene);
+			});
+
+		ImGui::TreePop();
+	}
+
+
+
+
+
+
+
+
+	//MODEL COMPONENTS
+	registry.view<ModelComponent, Transform>().each([&](auto entity, auto& modelComp, auto& transform) {
+		ImGui::Text("Current Components for entity %d", (int)entity); // optional display
+
+
+		if (registry.any_of<Transform>(entity))
+		{
+			ImGui::Text("Transforms");
+			// Encode entity into ID by using "##" suffix
+	// Create unique labels using "##" + entity ID
+			std::string posLabel = "Position##" + std::to_string((uint32_t)entity);
+			std::string scaleLabel = "Scale##" + std::to_string((uint32_t)entity);
+			std::string rotLabel = "Rotation##" + std::to_string((uint32_t)entity);
+
+			// Position
+			ImGui::SliderFloat3(posLabel.c_str(), &transform.position.x, -10.0f, 10.0f);
+
+			// Scale
+			ImGui::SliderFloat3(scaleLabel.c_str(), &transform.scale.x, -10.0f, 10.0f);
+
+			// Rotation
+			ImGui::SliderFloat3(rotLabel.c_str(), &transform.rotation.x, -360.0f, 360.0f);
+
+		}
+
+		if (registry.any_of<ModelComponent>(entity))
+		{
+			ImGui::Text("ModelComponent");
+		}
+		});
+
+	ImGui::End();
+
+
+
+	ImGui::Begin("Texture Inspector");
+
+	auto& m_Textures = m_ActiveScene->GetTextures();
+	static std::string currentTextureKey;
+
+	for (auto& [name, tex] : m_Textures)
+	{
+		ImGui::Text("Current Texture: %s", name.c_str());
+		ImGui::Text("Current Texture Name: %s", std::filesystem::path(name).stem().string().c_str());
+
+		;
+		// Display thumbnail if you have OpenGL ID
+		if (tex.id != 0) // assuming Texture struct has 'id' as GPU handle
+		{
+			ImVec2 size = ImVec2(128, 128);
+			ImGui::Image((void*)(intptr_t)tex.id, size, ImVec2(0, 1), ImVec2(1, 0));
+			ImGui::SameLine();
+		}
+	}
+
+
+
+	// Button to open file path popup
+	if (ImGui::Button("Load Texture"))
+	{
+		std::filesystem::path filepath = FileDialog::OpenFile();
+		//	ImGui::OpenPopup("Load Texture");
+		if (filepath.empty())
+		{
+			spdlog::error("Failed to load texture or canceled by usser");
+		}
+		else
+		{
+
+			Texture texture(filepath.string(), "texture_diffuse");
+
+			m_Textures.insert({ filepath.string(), texture });
+
+
+			currentTextureKey = filepath.string();
+
+		}
+
+	}
+
+	if (ImGui::BeginPopupModal("Load Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		static char filepath[256] = "";
+		ImGui::InputText("File Path", filepath, IM_ARRAYSIZE(filepath));
+
+		if (ImGui::Button("Load"))
+		{
+			std::string pathStr = filepath;
+			if (!pathStr.empty())
+			{
+				// Call your background loader here:
+				// Texture tex = LoadTexture(filepath);
+				// m_Textures[pathStr] = tex;
+				Texture texture(filepath, "texture_diffuse");
+
+				m_Textures.insert({ filepath, texture });
+
+				// Optionally set it as current
+				currentTextureKey = pathStr;
+
+				filepath[0] = '\0';
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			filepath[0] = '\0';
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::End();
+
+	ImGui::Begin("Modal inspector");
+
+
+	if (ImGui::Button(("Load Model")))
+	{
+		//	ImGui::OpenPopup(("Load Model"));
+
+		std::filesystem::path filepath = FileDialog::OpenFile();
+		if (filepath.empty())
+		{
+			spdlog::error("Failed to load model or canceled by user");
+		}
+		else
+		{
+
+			m_ActiveScene->CreateModel(filepath.string(), glm::vec4(1.0f));
+		}
+
+	}
+	if (ImGui::BeginPopupModal(("Load Model"), NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		static char filepath[256] = "";
+		ImGui::InputText("File Path", filepath, IM_ARRAYSIZE(filepath));
+
+		if (ImGui::Button("Load"))
+		{
+			std::string pathStr = filepath;
+
+			m_ActiveScene->CreateModel(filepath, glm::vec4(1.0f));
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			filepath[0] = '\0';
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::End();
+
+	ImGui::Begin("Registry Debug");
+
+
+	registry.view<Transform, ModelComponent>().each([&](auto entity, Transform& t, ModelComponent& mc) {
+		ImGui::Separator();
+		ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
+		ImGui::Text("Transform ptr: %p", &t);
+		ImGui::Text("Position: %.2f %.2f %.2f", t.position.x, t.position.y, t.position.z);
+		ImGui::Text("Scale: %.2f %.2f %.2f", t.scale.x, t.scale.y, t.scale.z);
+		ImGui::Text("ModelComponent shared_ptr: %p", mc.model.get());
+		ImGui::Text("ModelComponent loaded: %s", mc.model->IsLoaded() ? "true" : "false");
+		});
+
+	ImGui::End();
+
+	ImGui::End(); // end dockspace
+}
+
+void AppUI::DrawMainMenuBar()
+{
+}
+void AppUI::DrawSidebar(AppSettings& settings)
+{
+}
+void AppUI::DrawDebugConsole()
+{
+}
+

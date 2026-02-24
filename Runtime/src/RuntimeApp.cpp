@@ -15,8 +15,6 @@ void RuntimeApp::Init() {
 	// Create scene and pass the native GLFW window to it
 	m_Scene = std::make_shared<Scene>(m_Window->GetNativeWindow());
 
-	//m_Scene->CreateCubeGrid(2, 2, 2, glm::vec3(0.f));
-
 	m_Scene->Load("Default.sce");
 
 	m_Renderer = std::make_shared<Renderer>();
@@ -44,7 +42,7 @@ void RuntimeApp::Run() {
 		float deltaTime = std::chrono::duration<float>(currentFrame - lastFrame).count();
 		lastFrame = currentFrame;
 
-		m_Scene->script.update(1);
+		m_Scene->m_Script.update(1);
 
 		if (glfwGetKey(m_Window->GetNativeWindow(), GLFW_KEY_W) == GLFW_PRESS)
 			m_Scene->GetCamera().ProcessKeyboard(FORWARD, deltaTime);

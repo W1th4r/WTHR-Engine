@@ -18,10 +18,22 @@ enum class CameraType {
 
 class Scene {
 public:
-	Scene(GLFWwindow* window) : worker(window)
+	Scene() {}
+	//Scene(GLFWwindow* window) : worker(window)
+	//{
+	//	spdlog::set_level(spdlog::level::debug);
+	//	spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+	//}
+	~Scene()
 	{
-		spdlog::set_level(spdlog::level::debug);
-		spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+		delete m_Worker;
+		m_Worker = nullptr;
+	}
+	void SetWorker(GLFWwindow* window)
+	{
+		// Use 'new' because it's a pointer. 
+		// This calls the explicit constructor.
+		m_Worker = new GLContextWorker(window);
 	}
 	void print_transform(const Transform& t) {
 		std::cout << "Position: (" << t.position.x << ", " << t.position.y << ", " << t.position.z << ")\n";
@@ -145,7 +157,7 @@ public:
 		modelWrapper->Reset();
 
 		// Queue asynchronous GPU load
-		worker.AsyncLoadModel(modelWrapper, path);
+		m_Worker->AsyncLoadModel(modelWrapper, path);
 
 
 		return entity;
@@ -169,8 +181,8 @@ public:
 	T& AddComponent(entt::entity entity, Args&&... args) {
 		return m_Registry.emplace<T>(entity, std::forward<Args>(args)...);
 	}
-	GLContextWorker worker;
-	Script script;
+	GLContextWorker* m_Worker;
+	Script m_Script;
 private:
 	std::unordered_map<std::string, Texture> m_Textures; // path or name → texture data
 	entt::registry m_Registry;
