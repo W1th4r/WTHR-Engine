@@ -485,7 +485,7 @@ void AppUI::Update()
 		glfwSetInputMode(m_WindowManager->GetWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
-	
+
 
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -554,13 +554,13 @@ void AppUI::Update()
 	// Draw button
 	if (ImGui::Button("Play", buttonSize)) {
 		//Iterate all scritps and start
-	
+
 		m_Editor.Play();
 
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Stop", buttonSize)) {
-		
+
 		m_Editor.Stop();
 
 	}
@@ -574,7 +574,7 @@ void AppUI::Update()
 void AppUI::Render()
 {
 	auto& registry = m_ActiveScene->GetRegistry();
-	
+
 
 	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
@@ -974,15 +974,63 @@ void AppUI::Render()
 
 	ImGui::Begin("Registry Debug");
 
-
 	registry.view<Transform, ModelComponent>().each([&](auto entity, Transform& t, ModelComponent& mc) {
-		ImGui::Separator();
-		ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
-		ImGui::Text("Transform ptr: %p", &t);
-		ImGui::Text("Position: %.2f %.2f %.2f", t.position.x, t.position.y, t.position.z);
-		ImGui::Text("Scale: %.2f %.2f %.2f", t.scale.x, t.scale.y, t.scale.z);
-		ImGui::Text("ModelComponent shared_ptr: %p", mc.model.get());
-		ImGui::Text("ModelComponent loaded: %s", mc.model->IsLoaded() ? "true" : "false");
+		// Use a unique ID for each entity header
+		std::string label = "Entity: " + std::to_string(static_cast<uint32_t>(entity));
+
+		if (ImGui::CollapsingHeader(label.c_str())) {
+			ImGui::Indent();
+
+			// --- SECTION: THUMBNAIL & BASIC INFO ---
+			// Assuming your model has a GetThumbnail() returning an ImTextureID
+			// If you don't have one yet, this is where the placeholder goes
+			ImVec2 thumbSize(64, 64);
+			if (mc.model->GetThumbnail()) {
+				// Standard: ImVec2(0,0), ImVec2(1,1)
+// Flipped:  ImVec2(0,1), ImVec2(1,0)
+				ImGui::Image(
+					(ImTextureID)(intptr_t)mc.model->GetThumbnail(),
+					ImVec2(64, 64),
+					ImVec2(0, 1), // Top-left UV
+					ImVec2(1, 0)  // Bottom-right UV
+				);
+				ImGui::SameLine();
+			}
+
+			ImGui::BeginGroup();
+			ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Model Data");
+			ImGui::Text("File Size: %d Mb", mc.model->m_FileSize);
+
+			// Status with color
+			bool loaded = mc.model->IsLoaded();
+			ImGui::Text("Status: "); ImGui::SameLine();
+			ImGui::TextColored(loaded ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
+				loaded ? "LOADED" : "PENDING");
+			ImGui::EndGroup();
+
+			ImGui::Separator();
+
+			// --- SECTION: TRANSFORM (Using a Table for alignment) ---
+			if (ImGui::BeginTable("TransformTable", 2)) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0); ImGui::Text("Position");
+				ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f, %.2f, %.2f", t.position.x, t.position.y, t.position.z);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0); ImGui::Text("Scale");
+				ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f, %.2f, %.2f", t.scale.x, t.scale.y, t.scale.z);
+
+				ImGui::EndTable();
+			}
+
+			// --- SECTION: PERFORMANCE/DEBUG ---
+			ImGui::SeparatorText("Performance");
+			ImGui::Text("Load Time: %.3f s", mc.model->m_LoadTime.count());
+			ImGui::TextDisabled("Ptr: %p", mc.model.get());
+
+			ImGui::Unindent();
+			ImGui::Spacing();
+		}
 		});
 
 	ImGui::End();

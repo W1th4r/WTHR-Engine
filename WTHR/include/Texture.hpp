@@ -65,4 +65,22 @@ struct Texture {
         stbi_image_free(data);
         return true;
     }
+    void CreateEmpty(int width, int height, std::string typeName = "texture_diffuse1") {
+        type = typeName;
+        path = "generated_thumbnail";
+
+        if (id != 0) glDeleteTextures(1, &id); // Cleanup if already exists
+
+        glGenTextures(1, &id);
+        glBindTexture(GL_TEXTURE_2D, id);
+
+        // Create an empty image buffer
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+
+        // Filtering (Important for small thumbnails)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
 };

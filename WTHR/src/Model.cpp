@@ -58,6 +58,8 @@ bool Model::LoadWTHR(const std::string& path) {
 	fallbackTex->id = fallbackTex->LoadDefaultTexture();
 	fallbackTex->type = "texture_diffuse1"; // <--- THIS is what the shader looks for
 	fallbackTex->path = "internal_fallback_pink";
+
+	fallbackTex->LoadFromFile("diffuse.jpg", "texture_diffuse1");
 	fallbackVector.push_back(*fallbackTex);
 
 	for (uint32_t i = 0; i < meshCount; i++) {
