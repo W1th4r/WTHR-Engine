@@ -364,15 +364,24 @@ void AppUI::Update()
 
 	if (m_ActiveScene->GetCameraType() == CameraType::Editor)
 	{
+		float speedMultiplier = 1.0f;
+		// Check if Left or Right Shift is held
+		speedMultiplier = 10.f;
+		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+			glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+		{
+			speedMultiplier *= 2.0f; // 100% base + 200% added = 300% total (3x speed)
+		}
+		float finalDelta = deltaTime * speedMultiplier;
 
 		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_W) == GLFW_PRESS)
-			m_ActiveScene->GetCamera().ProcessKeyboard(FORWARD, deltaTime);
+			m_ActiveScene->GetCamera().ProcessKeyboard(FORWARD, finalDelta);
 		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_S) == GLFW_PRESS)
-			m_ActiveScene->GetCamera().ProcessKeyboard(BACKWARD, deltaTime);
+			m_ActiveScene->GetCamera().ProcessKeyboard(BACKWARD, finalDelta);
 		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_A) == GLFW_PRESS)
-			m_ActiveScene->GetCamera().ProcessKeyboard(LEFT, deltaTime);
+			m_ActiveScene->GetCamera().ProcessKeyboard(LEFT, finalDelta);
 		if (glfwGetKey(m_WindowManager->GetWindow(), GLFW_KEY_D) == GLFW_PRESS)
-			m_ActiveScene->GetCamera().ProcessKeyboard(RIGHT, deltaTime);
+			m_ActiveScene->GetCamera().ProcessKeyboard(RIGHT, finalDelta);
 	}
 
 
@@ -561,19 +570,6 @@ void AppUI::Update()
 		m_Editor.Pause();
 
 	}
-	if (ImGui::Button("\uf04b")) { /* Play */ }
-	ImGui::SameLine();
-	if (ImGui::Button("\uf04c")) { /* Pause */ }
-	ImGui::SameLine();
-	if (ImGui::Button("\uf04d")) { /* Stop */ }
-
-
-
-
-
-
-
-
 }
 void AppUI::Render()
 {

@@ -2,6 +2,7 @@
 #include "model.hpp"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.hpp>
+#include <filesystem>
 
 // ---------------- Constructors & Assignment Operators ----------------
 Model::Model() : gammaCorrection(false) {}
@@ -40,10 +41,51 @@ void Model::Draw(Shader& shader)
     for (auto& mesh : meshes)
         mesh.Draw(shader);
 }
+bool Model::LoadWTHR(const std::string& path) {
+    std::ifstream inFile(path, std::ios::binary);
+    if (!inFile) return false;
+
+    // 1. How many meshes are in this file?
+    uint32_t meshCount = 0;
+    inFile.read((char*)&meshCount, sizeof(uint32_t));
+
+    for (uint32_t i = 0; i < meshCount; i++) {
+        uint32_t vCount, iCount;
+        inFile.read((char*)&vCount, sizeof(uint32_t));
+        inFile.read((char*)&iCount, sizeof(uint32_t));
+
+        std::vector<Vertex> vertices(vCount);
+        std::vector<unsigned int> indices(iCount);
+
+        // THE GULP
+        inFile.read((char*)&vertices[0], vCount * sizeof(Vertex));
+        inFile.read((char*)&indices[0], iCount * sizeof(unsigned int));
+
+        // 2. Create the Mesh object and add it to the Model's vector
+        // You'll need to pass 'textures' here too eventually
+        meshes.emplace_back(vertices, indices, std::vector<Texture>());
+    }
+
+    inFile.close();
+    return true;
+}
 
 // ---------------- Private Methods ----------------
 void Model::loadModel(const std::string& path)
 {
+    std::filesystem::path filePath(path);
+
+    // 1. Check if we have a pre-cooked binary file
+    if (filePath.extension() == ".WTHR")
+    {
+        std::cout << "Loading optimized binary: " << filePath.filename() << std::endl;
+        if (LoadWTHR(path)) {
+            return; // Success! Skip Assimp entirely.
+        }
+        std::cout << "Binary load failed, falling back to Assimp..." << std::endl;
+    }
+
+    // 2. Fallback: Load via Assimp (The "Slow" Way)
     Assimp::Importer importer;
     const aiScene* scene = importer.ReadFile(
         path, aiProcess_Triangulate | aiProcess_GenSmoothNormals |
@@ -56,7 +98,7 @@ void Model::loadModel(const std::string& path)
         return;
     }
 
-    directory = path.substr(0, path.find_last_of('/'));
+    directory = filePath.parent_path().string();
     processNode(scene->mRootNode, scene);
 }
 
@@ -131,7 +173,10 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
     }
 
     aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+    
+ 
 
+    // Correct way to pass the type names to the shader
     auto diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
     textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
 
@@ -141,7 +186,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
     auto normalMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
     textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
 
-    auto heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
+    auto heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, directory + "texture_height");
     textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
 
     return Mesh(vertices, indices, textures);
@@ -155,10 +200,14 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
         aiString str;
         mat->GetTexture(type, i, &str);
 
+        // Use std::string for the path logic
+        std::string filename = std::string(str.C_Str());
+
+        // CHECK CACHE: Use the relative filename for comparison
         bool skip = false;
         for (auto& loadedTex : textures_loaded)
         {
-            if (std::strcmp(loadedTex.path.data(), str.C_Str()) == 0)
+            if (std::strcmp(loadedTex.path.data(), filename.c_str()) == 0)
             {
                 textures.push_back(loadedTex);
                 skip = true;
@@ -169,9 +218,10 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
         if (!skip)
         {
             Texture texture;
-            texture.id = TextureFromFile(str.C_Str(), this->directory);
+            // Only combine the path inside the loader function
+            texture.id = TextureFromFile(filename.c_str(), this->directory);
             texture.type = typeName;
-            texture.path = str.C_Str();
+            texture.path = filename;
             textures.push_back(texture);
             textures_loaded.push_back(texture);
         }
@@ -179,33 +229,36 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
     return textures;
 }
 
-
-
-
 unsigned int TextureFromFile(const char* path, const std::string& directory, bool gamma)
 {
-    std::string filename = std::string(path);
-    filename = path;
+    // Convert to filesystem paths
+    std::filesystem::path dirPath(directory);
+    std::filesystem::path fileName(path);
+
+    // The / operator automatically handles slashes correctly for Windows/Linux
+    // Result: "C:/Models/Backpack" + "diffuse.png" -> "C:/Models/Backpack/diffuse.png"
+    std::filesystem::path fullPath = dirPath / fileName;
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-    unsigned char* data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
+    stbi_set_flip_vertically_on_load(true);
+    // Use .string().c_str() to get the absolute system path
+    unsigned char* data = stbi_load(fullPath.string().c_str(), &width, &height, &nrComponents, 0);
+
     if (data)
     {
-        GLenum format;
-        if (nrComponents == 1)
-            format = GL_RED;
-        else if (nrComponents == 3)
-            format = GL_RGB;
-        else if (nrComponents == 4)
-            format = GL_RGBA;
+        GLenum format = GL_RGB;
+        if (nrComponents == 1) format = GL_RED;
+        else if (nrComponents == 3) format = GL_RGB;
+        else if (nrComponents == 4) format = GL_RGBA;
 
         glBindTexture(GL_TEXTURE_2D, textureID);
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
+        // Standard wrapping/filtering
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -215,7 +268,7 @@ unsigned int TextureFromFile(const char* path, const std::string& directory, boo
     }
     else
     {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
+        std::cout << "Texture failed to load at path: " << fullPath << std::endl;
         stbi_image_free(data);
     }
 

@@ -20,6 +20,7 @@ public:
 
 	Model(const std::string& path, bool gamma = false);
 
+	bool LoadWTHR(const std::string&);
 	void Draw(Shader& shader);
 	std::string getDirectory() { return directory; }
 private:

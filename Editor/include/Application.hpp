@@ -6,6 +6,7 @@
 #include <Renderer.hpp>
 #include <PhysicsWorld.hpp>
 #include <AppUI.hpp>
+#include <AssetCompiler.hpp>
 
 class Application
 {
@@ -34,4 +35,5 @@ protected:
 	PhysicsWorld m_World;
 	AppUI m_UI;
 	Scene m_ActiveScene;
+	AssetCompiler m_Compiler;
 };

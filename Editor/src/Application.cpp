@@ -145,7 +145,7 @@ void Application::Run()
 
 
 	auto ptrShdr = std::make_shared<Shader>("shaders/default.vert", "shaders/default.frag");
-
+	m_Compiler.CookModel(std::string(),std::string("cooked"));
 	while (m_WindowManager.isOpen())
 	{
 		auto currentFrame = std::chrono::high_resolution_clock::now();
