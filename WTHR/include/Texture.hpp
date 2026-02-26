@@ -5,7 +5,6 @@
 #include <iostream>
 
 struct Texture {
-public:
     unsigned int id = 0;
     std::string type;
     std::string path;
@@ -23,7 +22,23 @@ public:
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, id);
     }
+    unsigned int LoadDefaultTexture() {
+        unsigned int textureID;
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_2D, textureID);
 
+        // 4 bytes per pixel now (R, G, B, A)
+        unsigned char data[] = {
+            255, 0,   255, 255,   0,   0,   0,   255, // Row 1: Magenta, Black
+            0,   0,   0,   255,   255, 0,   255, 255  // Row 2: Black, Magenta
+        };
+
+        // Change both formats to GL_RGBA
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        return textureID;
+    }
 
     bool LoadFromFile(const std::string& path, std::string typep) {
         type = typep;
