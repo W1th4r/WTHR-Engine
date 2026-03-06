@@ -163,8 +163,8 @@ void Application::Run()
 
 
 		m_UI.Update();
-		m_UI.Render();
 
+		m_UI.Render();
 
 		m_Renderer.Clear();
 
@@ -172,6 +172,8 @@ void Application::Run()
 		ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
 			ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
 		m_Renderer.RenderScene(m_ActiveScene, *ptrShdr);
+		ImGui::End();
+
 		ImGui::End();
 
 

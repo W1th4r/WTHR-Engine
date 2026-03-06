@@ -1,4 +1,4 @@
-#include "AppUI.hpp"
+﻿#include "AppUI.hpp"
 #include "Renderer.hpp"
 #include "Scene.hpp"
 #include "InputManager.hpp"
@@ -286,14 +286,6 @@ static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 			registry.emplace<Collider>(e, ColliderDesc());
 		}
 
-
-
-
-
-
-
-
-
 		if (auto group = registry.try_get<GroupComponent>(e))
 		{
 			ImGui::InputInt("Group", &group->id);
@@ -320,26 +312,27 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer,
 
 	m_Editor.SetScene(m_ActiveScene);
 }
-void AppUI::NewFrame()
-{
+static entt::entity m_SelectedEntity;
 
-}
-static 	entt::entity ent;
 void AppUI::Update()
 {
+	DrawMenuBar();
 
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->Pos);
-	ImGui::SetNextWindowSize(viewport->Size);
+	ImGui::SetNextWindowPos(viewport->WorkPos);
+	ImGui::SetNextWindowSize(viewport->WorkSize);
 	ImGui::SetNextWindowViewport(viewport->ID);
+
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 
 	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // transparent background
 
 
@@ -347,14 +340,25 @@ void AppUI::Update()
 	// Start full-screen dockspace host window
 	ImGui::Begin("DockSpace Window", nullptr, window_flags);
 	ImGui::PopStyleColor();
-	ImGui::PopStyleVar(2);
+	ImGui::PopStyleVar(3);
 
 	// Create the actual DockSpace
 	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
 	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
+	ImGui::PushID("ToolbarButtons");
+	{
+		float buttonWidth = 100.0f;
+		float totalWidth = (buttonWidth * 3) + (ImGui::GetStyle().ItemSpacing.x * 2);
+		ImGui::SetCursorPos(ImVec2((ImGui::GetWindowSize().x - totalWidth) * 0.5f, 5.0f));
 
-
+		if (ImGui::Button("Play", { buttonWidth, 20 })) { m_Editor.Play(); }
+		ImGui::SameLine();
+		if (ImGui::Button("Stop", { buttonWidth, 20 })) { m_Editor.Stop(); }
+		ImGui::SameLine();
+		if (ImGui::Button("Pause", { buttonWidth, 20 })) { m_Editor.Pause(); }
+	}
+	ImGui::PopID();
 	extern std::chrono::steady_clock::time_point lastFrame;
 	auto currentFrame = std::chrono::high_resolution_clock::now();
 	float deltaTime = std::chrono::duration<float>(currentFrame - lastFrame).count();
@@ -399,7 +403,7 @@ void AppUI::Update()
 		{
 			double x, y;
 			glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
-			m_Renderer->HandlePickingClick(*m_ActiveScene, x, y, ent);
+			m_Renderer->HandlePickingClick(*m_ActiveScene, x, y, m_SelectedEntity);
 		}
 	}
 	else if (m_ActiveScene->GetCameraType() == CameraType::Player)
@@ -493,7 +497,8 @@ void AppUI::Update()
 		ImGuiWindowFlags_NoScrollbar |
 		ImGuiWindowFlags_NoTitleBar |
 		ImGuiWindowFlags_NoBringToFrontOnFocus |
-		ImGuiWindowFlags_NoBackground;
+		ImGuiWindowFlags_NoBackground |
+		ImGuiWindowFlags_NoInputs;
 
 	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
 	ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size);
@@ -536,137 +541,334 @@ void AppUI::Update()
 
 		ImGui::EndPopup();
 	}
-
-	const char* label = "Play";
-
-	// Get the current window size
-	ImVec2 windowSize = ImGui::GetContentRegionAvail(); // available size in the window
-
-	// Calculate the size of the button
-	ImVec2 buttonSize = ImVec2(100, 0); // width 100, height 0 (automatic)
-
-	// Set cursor X to center the button
-	ImGui::SetCursorPosX((windowSize.x - buttonSize.x) * 0.5f);
-
-	// Optional: center vertically in remaining space
-	// ImGui::SetCursorPosY((windowSize.y - buttonSize.y) * 0.5f);
-
-	// Draw button
-	if (ImGui::Button("Play", buttonSize)) {
-		//Iterate all scritps and start
-
-		m_Editor.Play();
-
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Stop", buttonSize)) {
-
-		m_Editor.Stop();
-
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Pause", buttonSize)) {
-
-		m_Editor.Pause();
-
-	}
 }
+
 void AppUI::Render()
 {
-	auto& registry = m_ActiveScene->GetRegistry();
 
 
-	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
+	DrawEntPanel();
 
-	ImGui::Begin("ECS");
-	if (ImGui::Button("Save"))
-	{
-		m_ActiveScene->Save(path);
-	}
-
-	ImGui::SameLine(); // Put next button on the same row
-
-	if (ImGui::Button("Load"))
-	{
-		m_ActiveScene->Load(path);
-	}
-	ImGui::SameLine(); // Put next button on the same row
-
-	if (ImGui::Button("Clear"))
-	{
-		registry.clear();
-		registry = entt::registry();
-	}
-
+	DrawPropertiesPanel();
 
 	ImGui::Separator();
 
+	DrawECSPanel();
+	DrawTextureInspector();
 
-	if (ImGui::Button("+ Entity"))
-	{
-		m_ActiveScene->CreateCube();
+	DrawModelPanel();
+
+	//ImGui::End(); // end dockspace
+}
+void AppUI::DrawEntPanel()
+{
+	auto& registry = m_ActiveScene->GetRegistry();
+	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
+
+	// Modern panel with better organization
+	ImGui::Begin("Entity Manager", nullptr, ImGuiWindowFlags_NoCollapse);
+
+	// --- TOP TOOLBAR WITH ICONS ---
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+
+	// Scene operations group
+	ImGui::BeginGroup();
+	ImGui::TextDisabled("SCENE");
+	ImGui::SameLine(60);
+
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 4));
+
+	if (ImGui::Button("󰆓 Save", ImVec2(70, 24))) {
+		m_ActiveScene->Save(path);
 	}
+	ImGui::SameLine();
+	if (ImGui::Button("󰁿 Load", ImVec2(70, 24))) {
+		m_ActiveScene->Load(path);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("󰧧 Clear", ImVec2(70, 24))) {
+		registry.clear();
+		registry = entt::registry();
+	}
+	ImGui::EndGroup();
 
-	ImGui::SameLine(); // Put next button on the same row
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
 
-	if (ImGui::Button("- Entity"))
-	{
-		if (registry.valid(ent)) // optional: check if entity is valid
-		{
-			registry.destroy(ent); // deletes the entity and all its components
-			ent = entt::null;     // reset your selected entity if needed
+	// Entity operations group
+	ImGui::BeginGroup();
+	ImGui::TextDisabled("ENTITIES");
+	ImGui::SameLine(60);
+
+	// Create entity dropdown with multiple options
+	if (ImGui::Button("󰩍 Create", ImVec2(80, 24))) {
+		ImGui::OpenPopup("CreateEntityPopup");
+	}
+	ImGui::SameLine();
+
+	if (ImGui::Button("󰆴 Delete", ImVec2(80, 24))) {
+		if (registry.valid(m_SelectedEntity)) {
+			registry.destroy(m_SelectedEntity);
+			m_SelectedEntity = entt::null;
 		}
 	}
-	// Persistent state
-	static int a = 0, b = 0;
-	static int nextGroupId = 0;
+	ImGui::SameLine();
 
-	if (ImGui::Button("Group"))
-	{
-		ImGui::OpenPopup("Group what"); // <-- open once when button is clicked
-	}
-
-	// Now draw the modal outside the button
-	if (ImGui::BeginPopupModal("Group what", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		// Input numbers
-		ImGui::InputInt("From", &a);
-		ImGui::InputInt("To", &b);
-
-		// Buttons
-		if (ImGui::Button("OK", ImVec2(120, 0)))
-		{
-			if (a > b) std::swap(a, b);
-			int groupId = nextGroupId++;
-
-			// Assign entities in range [a,b] to the group
-			registry.view<MeshComponent>().each([&](auto e, MeshComponent& mesh) {
-				uint32_t id = (uint32_t)e;
-				if (id >= a && id <= b)
-				{
-					if (registry.any_of<GroupComponent>(e))
-						registry.get<GroupComponent>(e).id = groupId;
-					else
-						registry.emplace<GroupComponent>(e, groupId);
-				}
-				});
-
-			ImGui::CloseCurrentPopup(); // close modal
+	// Duplicate button (new feature)
+	if (ImGui::Button("󰆞 Duplicate", ImVec2(80, 24))) {
+		if (registry.valid(m_SelectedEntity)) {
+			// Duplicate entity logic here
+			// This would copy all components to a new entity
 		}
+	}
+	ImGui::EndGroup();
 
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)))
-		{
+	ImGui::PopStyleVar();
+	ImGui::PopStyleColor(3);
+	ImGui::PopStyleVar();
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// --- ENTITY CREATION POPUP (MODERN GRID) ---
+	if (ImGui::BeginPopup("CreateEntityPopup"))
+	{
+		ImGui::TextDisabled("Create New Entity");
+		ImGui::Separator();
+
+		// Search bar for filtering
+		static char searchBuffer[64] = "";
+		ImGui::InputTextWithHint("##search", "󰍉 Search primitives...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+		ImGui::Separator();
+
+		// Grid of primitive buttons
+		ImGui::BeginGroup();
+
+		// Row 1
+		if (ImGui::Button("󰊄 Cube", ImVec2(100, 40))) {
+			m_ActiveScene->CreateCube();
 			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("󰊄 Sphere", ImVec2(100, 40))) {
+			m_ActiveScene->CreateSphere();
+			ImGui::CloseCurrentPopup();
+		}
+
+		// Row 2
+		if (ImGui::Button("󰊄 Plane", ImVec2(100, 40))) {
+			// m_ActiveScene->CreatePlane();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("󰊄 Cylinder", ImVec2(100, 40))) {
+			// m_ActiveScene->CreateCylinder();
+			ImGui::CloseCurrentPopup();
+		}
+
+		// Row 3
+		if (ImGui::Button("󰊄 Camera", ImVec2(100, 40))) {
+			auto entity = registry.create();
+			registry.emplace<Transform>(entity);
+			registry.emplace<Camera>(entity, glm::vec4(0.f));
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("󰊄 Light", ImVec2(100, 40))) {
+			// m_ActiveScene->CreateLight();
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndGroup();
+
+		ImGui::Separator();
+
+		// Advanced options
+		if (ImGui::BeginMenu("Advanced Grids"))
+		{
+			if (ImGui::MenuItem("Cube Grid 10x10x10")) {
+				m_ActiveScene->CreateCubeGrid(10, 10, 10);
+				ImGui::CloseCurrentPopup();
+			}
+			if (ImGui::MenuItem("Cube Grid 10x10x1")) {
+				m_ActiveScene->CreateCubeGrid(10, 1, 10);
+				ImGui::CloseCurrentPopup();
+			}
+			if (ImGui::MenuItem("Sphere Grid 5x5")) {
+				// m_ActiveScene->CreateSphereGrid(5, 5);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndMenu();
 		}
 
 		ImGui::EndPopup();
 	}
 
+	// --- GROUP MANAGEMENT SECTION (COLLAPSIBLE) ---
+	if (ImGui::CollapsingHeader("󰋃 Group Management", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::Indent(8);
 
+		// Group creation with range
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextDisabled("Create Group from Range");
+		ImGui::Spacing();
+		int a, b;
+		// Range inputs with better layout
+		ImGui::PushItemWidth(80);
+		ImGui::InputInt("##from", &a, 0);
+		ImGui::SameLine();
+		ImGui::Text("→");
+		ImGui::SameLine();
+		ImGui::InputInt("##to", &b, 0);
+		ImGui::PopItemWidth();
+
+		ImGui::SameLine();
+		if (ImGui::Button("Create Group", ImVec2(100, 24))) {
+			ImGui::OpenPopup("Group Creation Confirmation");
+		}
+
+		// Group creation confirmation modal
+		if (ImGui::BeginPopupModal("Group Creation Confirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Create group with entities %d through %d?", a, b);
+			ImGui::Separator();
+
+			if (ImGui::Button("✓ Confirm", ImVec2(120, 0))) {
+				if (a > b) std::swap(a, b);
+				int groupId = nextGroupId++;
+
+				registry.view<MeshComponent>().each([&](auto e, MeshComponent& mesh) {
+					uint32_t id = (uint32_t)e;
+					if (id >= a && id <= b) {
+						if (registry.any_of<GroupComponent>(e))
+							registry.get<GroupComponent>(e).id = groupId;
+						else
+							registry.emplace<GroupComponent>(e, groupId);
+					}
+					});
+
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("✗ Cancel", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+
+		ImGui::Spacing();
+
+		// Existing groups list
+		auto view = registry.view<GroupComponent>();
+		if (!view.empty()) {
+			ImGui::TextDisabled("Active Groups");
+
+			ImGui::BeginChild("GroupsList", ImVec2(0, 100), true);
+
+			std::unordered_map<int, int> groupCounts;
+			view.each([&](auto e, auto& g) {
+				groupCounts[g.id]++;
+				});
+
+			for (auto& [groupId, count] : groupCounts) {
+				ImGui::Bullet();
+				ImGui::Text("Group %d", groupId);
+				ImGui::SameLine(100);
+				ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%d entities", count);
+
+				ImGui::SameLine(ImGui::GetWindowWidth() - 60);
+				ImGui::PushID(groupId);
+				if (ImGui::SmallButton("Select")) {
+					// Select all entities in this group
+				}
+				ImGui::PopID();
+			}
+
+			ImGui::EndChild();
+		}
+
+		ImGui::Unindent(8);
+	}
+
+	ImGui::Spacing();
 	ImGui::Separator();
+	ImGui::Spacing();
 
+	// --- ENTITY COUNTER AND STATS ---
+	auto meshView = registry.view<MeshComponent>();
+	auto totalEntities = registry.storage<entt::entity>().size();
+	auto selectedCount = registry.valid(m_SelectedEntity) ? 1 : 0;
 
+	ImGui::BeginGroup();
+	ImGui::TextDisabled("Statistics");
+	ImGui::SameLine(100);
+
+	ImGui::Text("Total: %zu  |  Selected: %d  |  Meshes: %zu",
+		totalEntities, selectedCount, meshView.size());
+	ImGui::EndGroup();
+
+	// --- QUICK SELECTION BUTTONS ---
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	ImGui::TextDisabled("Quick Select");
+	ImGui::SameLine(100);
+
+	if (ImGui::SmallButton("All")) {
+		// Select first entity
+		auto view = registry.view<MeshComponent>();
+		if (!view.empty()) {
+			m_SelectedEntity = *view.begin();
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::SmallButton("None")) {
+		m_SelectedEntity = entt::null;
+	}
+	ImGui::SameLine();
+	if (ImGui::SmallButton("Invert")) {
+		// Invert selection logic
+	}
+	ImGui::SameLine();
+	if (ImGui::SmallButton("By Type...")) {
+		ImGui::OpenPopup("SelectByTypePopup");
+	}
+
+	// Select by type popup
+	if (ImGui::BeginPopup("SelectByTypePopup"))
+	{
+		ImGui::Text("Select all entities with:");
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("MeshComponent")) {
+			auto view = registry.view<MeshComponent>();
+			if (!view.empty()) m_SelectedEntity = *view.begin();
+		}
+		if (ImGui::MenuItem("RigidBody")) {
+			auto view = registry.view<RigidBody>();
+			if (!view.empty()) m_SelectedEntity = *view.begin();
+		}
+		if (ImGui::MenuItem("Camera")) {
+			auto view = registry.view<Camera>();
+			if (!view.empty()) m_SelectedEntity = *view.begin();
+		}
+
+		ImGui::EndPopup();
+	}
+
+}
+void AppUI::DrawECSPanel()
+{
+	auto& registry = m_ActiveScene->GetRegistry();
 	if (ImGui::TreeNode("Scene Hierarchy"))
 	{
 		std::unordered_map<int, std::vector<entt::entity>> groups;
@@ -805,13 +1007,6 @@ void AppUI::Render()
 		ImGui::TreePop();
 	}
 
-
-
-
-
-
-
-
 	//MODEL COMPONENTS
 	registry.view<ModelComponent, Transform>().each([&](auto entity, auto& modelComp, auto& transform) {
 		ImGui::Text("Current Components for entity %d", (int)entity); // optional display
@@ -846,6 +1041,9 @@ void AppUI::Render()
 	ImGui::End();
 
 
+}
+void AppUI::DrawTextureInspector()
+{
 
 	ImGui::Begin("Texture Inspector");
 
@@ -892,87 +1090,13 @@ void AppUI::Render()
 
 	}
 
-	if (ImGui::BeginPopupModal("Load Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		static char filepath[256] = "";
-		ImGui::InputText("File Path", filepath, IM_ARRAYSIZE(filepath));
-
-		if (ImGui::Button("Load"))
-		{
-			std::string pathStr = filepath;
-			if (!pathStr.empty())
-			{
-				// Call your background loader here:
-				// Texture tex = LoadTexture(filepath);
-				// m_Textures[pathStr] = tex;
-				Texture texture(filepath, "texture_diffuse");
-
-				m_Textures.insert({ filepath, texture });
-
-				// Optionally set it as current
-				currentTextureKey = pathStr;
-
-				filepath[0] = '\0';
-				ImGui::CloseCurrentPopup();
-			}
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
-		{
-			filepath[0] = '\0';
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::EndPopup();
-	}
-
 	ImGui::End();
+}
 
-	ImGui::Begin("Modal inspector");
-
-
-	if (ImGui::Button(("Load Model")))
-	{
-		//	ImGui::OpenPopup(("Load Model"));
-
-		std::filesystem::path filepath = FileDialog::OpenFile();
-		if (filepath.empty())
-		{
-			spdlog::error("Failed to load model or canceled by user");
-		}
-		else
-		{
-
-			m_ActiveScene->CreateModel(filepath.string(), glm::vec4(1.0f));
-		}
-
-	}
-	if (ImGui::BeginPopupModal(("Load Model"), NULL, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		static char filepath[256] = "";
-		ImGui::InputText("File Path", filepath, IM_ARRAYSIZE(filepath));
-
-		if (ImGui::Button("Load"))
-		{
-			std::string pathStr = filepath;
-
-			m_ActiveScene->CreateModel(filepath, glm::vec4(1.0f));
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
-		{
-			filepath[0] = '\0';
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::EndPopup();
-	}
-
-	ImGui::End();
-
+void AppUI::DrawModelPanel()
+{
 	ImGui::Begin("Registry Debug");
+	auto& registry = m_ActiveScene->GetRegistry();
 
 	registry.view<Transform, ModelComponent>().each([&](auto entity, Transform& t, ModelComponent& mc) {
 		// Use a unique ID for each entity header
@@ -1034,17 +1158,592 @@ void AppUI::Render()
 		});
 
 	ImGui::End();
-
-	ImGui::End(); // end dockspace
 }
-
-void AppUI::DrawMainMenuBar()
+void AppUI::DrawMenuBar()
 {
-}
-void AppUI::DrawSidebar(AppSettings& settings)
-{
-}
-void AppUI::DrawDebugConsole()
-{
-}
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
+				m_ActiveScene->GetRegistry().clear();
+				// Reset scene defaults here
+			}
 
+			if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+				std::filesystem::path path = FileDialog::OpenFile(); // Assuming this opens a .sce
+				if (!path.empty()) m_ActiveScene->Load(path);
+			}
+
+			if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+				// You previously used "Default.sce", better to use a path variable
+				std::filesystem::path path = std::filesystem::current_path() / "Default.sce";
+				m_ActiveScene->Save(path);
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Import Model...")) {
+				std::filesystem::path filepath = FileDialog::OpenFile();
+				if (!filepath.empty()) {
+					m_ActiveScene->CreateModel(filepath.string(), glm::vec4(1.0f));
+				}
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Exit", "Alt+F4")) {
+				// Trigger application close (e.g., glfwSetWindowShouldClose)
+			}
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Edit"))
+		{
+			if (ImGui::MenuItem("Undo", "Ctrl+Z", false, false)) {} // Placeholder
+			if (ImGui::MenuItem("Redo", "Ctrl+Y", false, false)) {} // Placeholder
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Clear Registry")) {
+				m_ActiveScene->GetRegistry().clear();
+			}
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("View"))
+		{
+			// Use these to toggle your panel visibility if you add boolean flags
+			static bool showECS = true;
+			ImGui::MenuItem("ECS Panel", nullptr, &showECS);
+
+			static bool showPerf = true;
+			ImGui::MenuItem("Performance Overlay", nullptr, &showPerf);
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Help"))
+		{
+			if (ImGui::MenuItem("About")) { /* Show a modal or version info */ }
+			ImGui::EndMenu();
+		}
+
+		// Quick Stats on the far right
+		float width = ImGui::GetWindowWidth();
+		ImGui::SetCursorPosX(width - 150);
+		ImGui::TextDisabled("%.1f FPS", ImGui::GetIO().Framerate);
+
+		ImGui::EndMainMenuBar();
+	}
+}
+void AppUI::DrawPropertiesPanel()
+{
+	ImGui::Begin("Properties Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
+
+	if (m_SelectedEntity == entt::null || !m_ActiveScene->GetRegistry().valid(m_SelectedEntity))
+	{
+		// Empty state with icon and message
+		ImVec2 windowSize = ImGui::GetContentRegionAvail();
+		ImGui::SetCursorPosY(windowSize.y * 0.4f);
+
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+		ImGui::SetCursorPosX((windowSize.x - ImGui::CalcTextSize("󰉍 No Entity Selected").x) * 0.5f);
+		ImGui::Text("󰉍 No Entity Selected");
+		ImGui::SetCursorPosX((windowSize.x - ImGui::CalcTextSize("Select an entity in the Scene Hierarchy").x) * 0.5f);
+		ImGui::TextDisabled("Select an entity in the Scene Hierarchy");
+		ImGui::PopStyleColor();
+
+		ImGui::End();
+		return;
+	}
+
+	auto& registry = m_ActiveScene->GetRegistry();
+
+	// --- ENTITY HEADER WITH ICON AND STATUS ---
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+	ImGui::BeginChild("EntityHeader", ImVec2(0, 48), true, ImGuiWindowFlags_NoScrollbar);
+
+	ImGui::SetCursorPos(ImVec2(8, 8));
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assuming you have a larger font loaded
+	ImGui::Text("󰈸"); // Entity icon
+	ImGui::PopFont();
+
+	ImGui::SameLine(40);
+	ImGui::BeginGroup();
+	ImGui::Text("Entity %d", (uint32_t)m_SelectedEntity);
+
+	// Tag/Badge for entity type
+	if (registry.any_of<Camera>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 0.6f));
+		ImGui::SmallButton("Camera");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<RigidBody>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.6f));
+		ImGui::SmallButton("Physics");
+		ImGui::PopStyleColor();
+	}
+
+	ImGui::TextDisabled("Entity ID: %d | Active", (uint32_t)m_SelectedEntity);
+	ImGui::EndGroup();
+
+	ImGui::EndChild();
+	ImGui::PopStyleColor();
+
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// --- SCROLLABLE COMPONENTS AREA ---
+	ImGui::BeginChild("ComponentsArea", ImVec2(0, -(ImGui::GetFrameHeightWithSpacing() + 8)), true);
+
+	// --- 1. TRANSFORM COMPONENT (ALWAYS FIRST, ALWAYS VISIBLE) ---
+	if (registry.any_of<Transform>(m_SelectedEntity))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+
+		// Collapsible header with component icon and context menu
+		bool transformOpen = ImGui::CollapsingHeader("󰄤 Transform", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar (hamburger menu for remove/reset)
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###TransformMenu")) {
+			ImGui::OpenPopup("TransformContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("TransformContextMenu")) {
+			if (ImGui::MenuItem("Reset Position")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.position = glm::vec3(0.0f);
+			}
+			if (ImGui::MenuItem("Reset Rotation")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.rotation = glm::vec3(0.0f);
+			}
+			if (ImGui::MenuItem("Reset Scale")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.scale = glm::vec3(1.0f);
+			}
+			ImGui::Separator();
+			if (ImGui::MenuItem("Remove Component", nullptr, false, false)) {
+				// Can't remove transform - disabled
+			}
+			ImGui::EndPopup();
+		}
+
+		if (transformOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& t = registry.get<Transform>(m_SelectedEntity);
+
+			// Position with better layout and reset buttons
+			ImGui::PushID("TransformPos");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Position");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float pos[3] = { t.position.x, t.position.y, t.position.z };
+			if (ImGui::DragFloat3("##pos", pos, 0.1f, 0.0f, 0.0f, "%.2f")) {
+				t.position = glm::vec3(pos[0], pos[1], pos[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+			if (ImGui::SmallButton("R##resetPos")) {
+				t.position = glm::vec3(0.0f);
+			}
+			ImGui::PopStyleColor();
+			ImGui::PopID();
+
+			// Rotation
+			ImGui::PushID("TransformRot");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Rotation");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float rot[3] = { t.rotation.x, t.rotation.y, t.rotation.z };
+			if (ImGui::DragFloat3("##rot", rot, 1.0f, -360.0f, 360.0f, "%.1f°")) {
+				t.rotation = glm::vec3(rot[0], rot[1], rot[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("R##resetRot")) {
+				t.rotation = glm::vec3(0.0f);
+			}
+			ImGui::PopID();
+
+			// Scale
+			ImGui::PushID("TransformScale");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Scale   ");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float scale[3] = { t.scale.x, t.scale.y, t.scale.z };
+			if (ImGui::DragFloat3("##scale", scale, 0.1f, 0.01f, 100.0f, "%.2f")) {
+				t.scale = glm::vec3(scale[0], scale[1], scale[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("R##resetScale")) {
+				t.scale = glm::vec3(1.0f);
+			}
+			ImGui::PopID();
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+
+		ImGui::PopStyleVar();
+	}
+
+	// --- 2. MATERIAL COMPONENT (MODERN CARD STYLE) ---
+	if (registry.any_of<MeshComponent, ModelComponent>(m_SelectedEntity))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+
+		bool materialOpen = ImGui::CollapsingHeader("󰜫 Material", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###MaterialMenu")) {
+			ImGui::OpenPopup("MaterialContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("MaterialContextMenu")) {
+			if (ImGui::MenuItem("Clear Textures")) {
+				if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+					auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+					meshComp.mesh->mesh.textures.clear();
+				}
+			}
+			if (ImGui::MenuItem("Remove Component", nullptr, false, false)) {
+				registry.remove<MeshComponent>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (materialOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& textures = m_ActiveScene->GetTextures();
+
+			// Material preview card
+			ImGui::BeginChild("MaterialPreview", ImVec2(0, 120), true, ImGuiWindowFlags_NoScrollbar);
+
+			// Left side - texture preview
+			ImGui::BeginGroup();
+			ImVec2 previewSize = ImVec2(100, 100);
+			ImGui::InvisibleButton("##PreviewDrop", previewSize);
+
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TEXTURE_PATH")) {
+					const char* path = (const char*)payload->Data;
+					// Handle texture drop
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			// Draw preview box with texture if available
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImVec2 previewPos = ImGui::GetItemRectMin();
+
+			// Checkerboard background
+			drawList->AddRectFilled(previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y), IM_COL32(60, 60, 60, 255));
+			for (int i = 0; i < 4; i++) {
+				for (int j = 0; j < 4; j++) {
+					if ((i + j) % 2 == 0) {
+						ImVec2 p1(previewPos.x + i * 25, previewPos.y + j * 25);
+						ImVec2 p2(p1.x + 25, p1.y + 25);
+						drawList->AddRectFilled(p1, p2, IM_COL32(80, 80, 80, 255));
+					}
+				}
+			}
+
+			// Show texture if available
+			if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+				auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+				if (!meshComp.mesh->mesh.textures.empty()) {
+					auto& tex = meshComp.mesh->mesh.textures[0];
+					// Draw texture here if you have the ID
+					// drawList->AddImage((void*)(intptr_t)tex.id, previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y));
+				}
+			}
+
+			ImGui::SameLine(120);
+
+			// Right side - material properties
+			ImGui::BeginGroup();
+			ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Diffuse Map");
+			ImGui::Spacing();
+
+			// Texture dropdown with preview
+			static std::string currentTexture = "None";
+			if (ImGui::BeginCombo("##TextureSelect", currentTexture.c_str(), ImGuiComboFlags_HeightLarge))
+			{
+				if (ImGui::Selectable("None", currentTexture == "None")) {
+					currentTexture = "None";
+					// Clear textures
+				}
+
+				ImGui::Separator();
+
+				for (auto& [path, tex] : textures)
+				{
+					std::string filename = std::filesystem::path(path).filename().string();
+					bool isSelected = (currentTexture == filename);
+
+					if (ImGui::Selectable(filename.c_str(), isSelected)) {
+						currentTexture = filename;
+						// Apply texture to entity
+						if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+							auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+							meshComp.mesh->mesh.textures.push_back(tex);
+						}
+					}
+					if (isSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::Spacing();
+
+			// Material properties
+			static float metallic = 0.5f;
+			static float roughness = 0.5f;
+			static float ao = 1.0f;
+
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f, "%.2f");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f, "%.2f");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f, "%.2f");
+
+			ImGui::EndGroup();
+			ImGui::EndGroup();
+
+			ImGui::EndChild();
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+
+		ImGui::PopStyleVar();
+	}
+
+	// --- 3. PHYSICS SECTION WITH MODERN TOGGLES ---
+	if (registry.any_of<RigidBody>(m_SelectedEntity))
+	{
+		bool physicsOpen = ImGui::CollapsingHeader("󰊤 Physics", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###PhysicsMenu")) {
+			ImGui::OpenPopup("PhysicsContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("PhysicsContextMenu")) {
+			if (ImGui::MenuItem("Remove Component")) {
+				registry.remove<RigidBody>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (physicsOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& rb = registry.get<RigidBody>(m_SelectedEntity);
+
+			// Modern toggle switches
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Gravity");
+			ImGui::SameLine(120);
+
+			// Custom toggle style
+			ImGui::PushStyleColor(ImGuiCol_Button, rb.useGravity ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+			if (ImGui::Button(rb.useGravity ? "ON" : "OFF", ImVec2(50, 0))) {
+				rb.useGravity = !rb.useGravity;
+			}
+			ImGui::PopStyleColor();
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Kinematic");
+			ImGui::SameLine(120);
+
+			ImGui::PushStyleColor(ImGuiCol_Button, rb.isKinematic ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+			if (ImGui::Button(rb.isKinematic ? "ON" : "OFF", ImVec2(50, 0))) {
+				rb.isKinematic = !rb.isKinematic;
+			}
+			ImGui::PopStyleColor();
+
+			// Mass property
+			static float mass = 1.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Mass");
+			ImGui::SameLine(120);
+			ImGui::SetNextItemWidth(150);
+			ImGui::DragFloat("##mass", &mass, 0.1f, 0.01f, 1000.0f, "%.2f kg");
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+	}
+
+	// --- 4. CAMERA COMPONENT ---
+	if (registry.any_of<Camera>(m_SelectedEntity))
+	{
+		bool cameraOpen = ImGui::CollapsingHeader("󰀙 Camera", ImGuiTreeNodeFlags_DefaultOpen);
+
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###CameraMenu")) {
+			ImGui::OpenPopup("CameraContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("CameraContextMenu")) {
+			if (ImGui::MenuItem("Set as Main Camera")) {
+				m_ActiveScene->setCameraType(CameraType::Player);
+			}
+			if (ImGui::MenuItem("Remove Component")) {
+				registry.remove<Camera>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (cameraOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& cam = registry.get<Camera>(m_SelectedEntity);
+
+			// Camera presets
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Preset");
+			ImGui::SameLine(80);
+
+			if (ImGui::Button("Perspective", ImVec2(90, 0))) {
+				// Set perspective
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Orthographic", ImVec2(90, 0))) {
+				// Set orthographic
+			}
+
+			// FOV slider
+			static float fov = 60.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("FOV");
+			ImGui::SameLine(80);
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("##fov", &fov, 10.0f, 120.0f, "%.1f°");
+
+			// Clipping planes
+			static float nearPlane = 0.1f;
+			static float farPlane = 1000.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Clipping");
+			ImGui::SameLine(80);
+			ImGui::SetNextItemWidth(70);
+			ImGui::DragFloat("Near", &nearPlane, 0.01f, 0.01f, 10.0f, "%.2f");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(70);
+			ImGui::DragFloat("Far", &farPlane, 1.0f, 10.0f, 10000.0f, "%.1f");
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+	}
+
+	ImGui::EndChild();
+
+	// --- 5. ADD COMPONENT BUTTON (MODERN FLOATING STYLE) ---
+	ImGui::Separator();
+	ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
+
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
+
+	if (ImGui::Button("+ Add Component", ImVec2(150, 28))) {
+		ImGui::OpenPopup("AddComponentPopup");
+	}
+
+	ImGui::PopStyleColor(3);
+
+	// Modern component search popup
+	if (ImGui::BeginPopup("AddComponentPopup"))
+	{
+		ImGui::Text("Search Components");
+		ImGui::Separator();
+
+		static char searchBuffer[128] = "";
+		ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+
+		ImGui::Separator();
+
+		// Component categories
+		if (ImGui::BeginMenu("Rendering")) {
+			if (ImGui::MenuItem("Mesh Renderer")) {}
+			if (ImGui::MenuItem("Model")) {}
+			if (ImGui::MenuItem("Light")) {}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Physics")) {
+			if (ImGui::MenuItem("RigidBody")) {
+				if (!registry.any_of<RigidBody>(m_SelectedEntity)) {
+					auto trans = registry.get<Transform>(m_SelectedEntity).position;
+					registry.emplace<RigidBody>(m_SelectedEntity, RigidBodyDesc(trans));
+				}
+			}
+			if (ImGui::MenuItem("Collider")) {
+				if (!registry.any_of<Collider>(m_SelectedEntity)) {
+					registry.emplace<Collider>(m_SelectedEntity, ColliderDesc());
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Camera")) {
+			if (ImGui::MenuItem("Camera")) {
+				if (!registry.any_of<Camera>(m_SelectedEntity)) {
+					registry.emplace<Camera>(m_SelectedEntity, glm::vec4(0.f));
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Effects")) {
+			if (ImGui::MenuItem("Color")) {
+				if (!registry.any_of<Color>(m_SelectedEntity)) {
+					registry.emplace<Color>(m_SelectedEntity, glm::vec4(0.f));
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::End();
+}
