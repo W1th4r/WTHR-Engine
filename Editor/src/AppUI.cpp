@@ -286,14 +286,6 @@ static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 			registry.emplace<Collider>(e, ColliderDesc());
 		}
 
-
-
-
-
-
-
-
-
 		if (auto group = registry.try_get<GroupComponent>(e))
 		{
 			ImGui::InputInt("Group", &group->id);
@@ -570,6 +562,12 @@ void AppUI::Update()
 		m_Editor.Pause();
 
 	}
+	ImGui::SetCursorPosX(ImGui::GetWindowSize().x/2);
+	bool l_isPlaying = m_Editor.IsPlaying();
+	if (l_isPlaying)
+		ImGui::Text("Scene is playing");
+	else ImGui::Text("Scene is stopped");
+
 }
 void AppUI::Render()
 {

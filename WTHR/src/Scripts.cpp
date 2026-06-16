@@ -212,6 +212,11 @@ void Script::update(float dt) {
 
 void Script::bindTransforms(entt::registry& registry) {
     // 1️⃣ Expose glm::vec3 to Lua
+   
+    lua = sol::state();
+    lua.open_libraries(sol::lib::base); // Re-open standard libs if needed
+    //TODO Try if scripts don't work and bug when doind bindTransforms
+
     lua.new_usertype<glm::vec3>("Vec3",
         "x", &glm::vec3::x,
         "y", &glm::vec3::y,

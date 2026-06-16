@@ -1,4 +1,16 @@
-cmake_minimum_required(VERSION 3.20)
+# 1. Update minimum version to 3.25+ so CMake actually knows what Hot Reload variables are
+cmake_minimum_required(VERSION 3.25)
+
+# 2. Enable the policy FIRST
+if(POLICY CMP0141)
+  cmake_policy(SET CMP0141 NEW)
+endif()
+
+# 3. Now set the Hot Reload format
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT 
+  "$<IF:$<CONFIG:Debug>,EditAndContinue,ProgramDatabase>"
+)
+
 project(WTHR LANGUAGES C CXX)
 
 # Set C++ standard for the whole project
@@ -6,11 +18,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# MSVC multi-processor compile
+# MSVC specific tweaks
 if(MSVC)
     add_compile_options(/MP)
-  
+    # This matches CMP0141 behavior perfectly
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
+
 if(MSVC)
   set(CMAKE_C_COMPILER_LAUNCHER "")
   set(CMAKE_CXX_COMPILER_LAUNCHER "")

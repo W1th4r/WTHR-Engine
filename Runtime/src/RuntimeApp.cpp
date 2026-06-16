@@ -13,7 +13,9 @@ void RuntimeApp::Init() {
 	m_Window = std::make_shared<Window>(1920, 1080, "WTHR Runtime");
 
 	// Create scene and pass the native GLFW window to it
-	m_Scene = std::make_shared<Scene>(m_Window->GetNativeWindow());
+	//m_Scene = std::make_shared<Scene>(m_Window->GetNativeWindow());
+	//Removed parametirzed constructor for some reason
+	m_Scene = std::make_shared<Scene>();
 
 	m_Scene->Load("Default.sce");
 
