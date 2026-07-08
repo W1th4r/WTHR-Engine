@@ -1,4 +1,4 @@
-#include "AppUI.hpp"
+﻿#include "AppUI.hpp"
 #include "Renderer.hpp"
 #include "Scene.hpp"
 #include "InputManager.hpp"
@@ -309,11 +309,7 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager
 	m_Editor.SetScene(m_ActiveScene);
 	m_Scripts.set(&m_ActiveScene->m_Script);
 }
-void AppUI::NewFrame()
-{
-
-}
-static 	entt::entity ent;
+static entt::entity ent;
 void AppUI::Update()
 {
 
@@ -568,14 +564,11 @@ void AppUI::Update()
 
 void AppUI::Render()
 {
-	auto& registry = m_ActiveScene->GetRegistry();
-	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
-
+	this->DrawMenuBar();
 	this->RenderEcs();
 	this->RenderInspectors();
 	this->RenderScripts();
 	this->RenderObjectInspector();
-	this->DrawMenuBar();
 }
 
 void AppUI::RenderEcs()
@@ -1051,22 +1044,513 @@ void AppUI::RenderScripts()
 
 void AppUI::RenderObjectInspector()
 {
-	ImGui::Begin("Object Inspector");
-	if (static_cast<UINT32>(ent) != 0)
+	ImGui::Begin("Properties Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
+	auto& m_SelectedEntity = ent;
+	if (m_SelectedEntity == entt::null || !m_ActiveScene->GetRegistry().valid(m_SelectedEntity))
 	{
-		ImGui::Text("Enemy selected %d",ent);
-		auto& registry = m_ActiveScene->GetRegistry();
-		auto& object = registry.get<Transform>(ent);
-		ImGui::DragFloat3("Position", &object.position.x, 0.1f);
+		// Empty state with icon and message
+		ImVec2 windowSize = ImGui::GetContentRegionAvail();
+		ImGui::SetCursorPosY(windowSize.y * 0.4f);
 
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+		ImGui::SetCursorPosX((windowSize.x - ImGui::CalcTextSize("󰉍 No Entity Selected").x) * 0.5f);
+		ImGui::Text("󰉍 No Entity Selected");
+		ImGui::SetCursorPosX((windowSize.x - ImGui::CalcTextSize("Select an entity in the Scene Hierarchy").x) * 0.5f);
+		ImGui::TextDisabled("Select an entity in the Scene Hierarchy");
+		ImGui::PopStyleColor();
+
+		ImGui::End();
+		return;
 	}
-	else
-	{
 
+	auto& registry = m_ActiveScene->GetRegistry();
+
+	// --- ENTITY HEADER WITH ICON AND STATUS ---
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+	ImGui::BeginChild("EntityHeader", ImVec2(0, 48), true, ImGuiWindowFlags_NoScrollbar);
+
+	ImGui::SetCursorPos(ImVec2(8, 8));
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assuming you have a larger font loaded
+	ImGui::Text("󰈸"); // Entity icon
+	ImGui::PopFont();
+
+	ImGui::SameLine(40);
+	ImGui::BeginGroup();
+	ImGui::Text("Entity %d", (uint32_t)m_SelectedEntity);
+
+	// Tag/Badge for entity type
+	if (registry.any_of<Camera>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 0.6f));
+		ImGui::SmallButton("Camera");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<RigidBody>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.6f));
+		ImGui::SmallButton("Physics");
+		ImGui::PopStyleColor();
+	}
+
+	ImGui::TextDisabled("Entity ID: %d | Active", (uint32_t)m_SelectedEntity);
+	ImGui::EndGroup();
+
+	ImGui::EndChild();
+	ImGui::PopStyleColor();
+
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// --- SCROLLABLE COMPONENTS AREA ---
+	ImGui::BeginChild("ComponentsArea", ImVec2(0, -(ImGui::GetFrameHeightWithSpacing() + 8)), true);
+
+	// --- 1. TRANSFORM COMPONENT (ALWAYS FIRST, ALWAYS VISIBLE) ---
+	if (registry.any_of<Transform>(m_SelectedEntity))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+
+		// Collapsible header with component icon and context menu
+		bool transformOpen = ImGui::CollapsingHeader("󰄤 Transform", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar (hamburger menu for remove/reset)
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###TransformMenu")) {
+			ImGui::OpenPopup("TransformContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("TransformContextMenu")) {
+			if (ImGui::MenuItem("Reset Position")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.position = glm::vec3(0.0f);
+			}
+			if (ImGui::MenuItem("Reset Rotation")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.rotation = glm::vec3(0.0f);
+			}
+			if (ImGui::MenuItem("Reset Scale")) {
+				auto& t = registry.get<Transform>(m_SelectedEntity);
+				t.scale = glm::vec3(1.0f);
+			}
+			ImGui::Separator();
+			if (ImGui::MenuItem("Remove Component", nullptr, false, false)) {
+				// Can't remove transform - disabled
+			}
+			ImGui::EndPopup();
+		}
+
+		if (transformOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& t = registry.get<Transform>(m_SelectedEntity);
+
+			// Position with better layout and reset buttons
+			ImGui::PushID("TransformPos");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Position");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float pos[3] = { t.position.x, t.position.y, t.position.z };
+			if (ImGui::DragFloat3("##pos", pos, 0.1f, 0.0f, 0.0f, "%.2f")) {
+				t.position = glm::vec3(pos[0], pos[1], pos[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+			if (ImGui::SmallButton("R##resetPos")) {
+				t.position = glm::vec3(0.0f);
+			}
+			ImGui::PopStyleColor();
+			ImGui::PopID();
+
+			// Rotation
+			ImGui::PushID("TransformRot");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Rotation");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float rot[3] = { t.rotation.x, t.rotation.y, t.rotation.z };
+			if (ImGui::DragFloat3("##rot", rot, 1.0f, -360.0f, 360.0f, "%.1f°")) {
+				t.rotation = glm::vec3(rot[0], rot[1], rot[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("R##resetRot")) {
+				t.rotation = glm::vec3(0.0f);
+			}
+			ImGui::PopID();
+
+			// Scale
+			ImGui::PushID("TransformScale");
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Scale   ");
+			ImGui::SameLine(80);
+
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 60);
+			float scale[3] = { t.scale.x, t.scale.y, t.scale.z };
+			if (ImGui::DragFloat3("##scale", scale, 0.1f, 0.01f, 100.0f, "%.2f")) {
+				t.scale = glm::vec3(scale[0], scale[1], scale[2]);
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("R##resetScale")) {
+				t.scale = glm::vec3(1.0f);
+			}
+			ImGui::PopID();
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+
+		ImGui::PopStyleVar();
+	}
+
+	// --- 2. MATERIAL COMPONENT (MODERN CARD STYLE) ---
+	if (registry.any_of<MeshComponent, ModelComponent>(m_SelectedEntity))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+
+		bool materialOpen = ImGui::CollapsingHeader("󰜫 Material", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###MaterialMenu")) {
+			ImGui::OpenPopup("MaterialContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("MaterialContextMenu")) {
+			if (ImGui::MenuItem("Clear Textures")) {
+				if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+					auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+					meshComp.mesh->mesh.textures.clear();
+				}
+			}
+			if (ImGui::MenuItem("Remove Component", nullptr, false, false)) {
+				registry.remove<MeshComponent>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (materialOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& textures = m_ActiveScene->GetTextures();
+
+			// Material preview card
+			ImGui::BeginChild("MaterialPreview", ImVec2(0, 120), true, ImGuiWindowFlags_NoScrollbar);
+
+			// Left side - texture preview
+			ImGui::BeginGroup();
+			ImVec2 previewSize = ImVec2(100, 100);
+			ImGui::InvisibleButton("##PreviewDrop", previewSize);
+
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TEXTURE_PATH")) {
+					const char* path = (const char*)payload->Data;
+					// Handle texture drop
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			// Draw preview box with texture if available
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImVec2 previewPos = ImGui::GetItemRectMin();
+
+			// Checkerboard background
+			drawList->AddRectFilled(previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y), IM_COL32(60, 60, 60, 255));
+			for (int i = 0; i < 4; i++) {
+				for (int j = 0; j < 4; j++) {
+					if ((i + j) % 2 == 0) {
+						ImVec2 p1(previewPos.x + i * 25, previewPos.y + j * 25);
+						ImVec2 p2(p1.x + 25, p1.y + 25);
+						drawList->AddRectFilled(p1, p2, IM_COL32(80, 80, 80, 255));
+					}
+				}
+			}
+
+			// Show texture if available
+			if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+				auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+				if (!meshComp.mesh->mesh.textures.empty()) {
+					auto& tex = meshComp.mesh->mesh.textures[0];
+					// Draw texture here if you have the ID
+					// drawList->AddImage((void*)(intptr_t)tex.id, previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y));
+				}
+			}
+
+			ImGui::SameLine(120);
+
+			// Right side - material properties
+			ImGui::BeginGroup();
+			ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Diffuse Map");
+			ImGui::Spacing();
+
+			// Texture dropdown with preview
+			static std::string currentTexture = "None";
+			if (ImGui::BeginCombo("##TextureSelect", currentTexture.c_str(), ImGuiComboFlags_HeightLarge))
+			{
+				if (ImGui::Selectable("None", currentTexture == "None")) {
+					currentTexture = "None";
+					// Clear textures
+				}
+
+				ImGui::Separator();
+
+				for (auto& [path, tex] : textures)
+				{
+					std::string filename = std::filesystem::path(path).filename().string();
+					bool isSelected = (currentTexture == filename);
+
+					if (ImGui::Selectable(filename.c_str(), isSelected)) {
+						currentTexture = filename;
+						// Apply texture to entity
+						if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+							auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+							meshComp.mesh->mesh.textures.push_back(tex);
+						}
+					}
+					if (isSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::Spacing();
+
+			// Material properties
+			static float metallic = 0.5f;
+			static float roughness = 0.5f;
+			static float ao = 1.0f;
+
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f, "%.2f");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f, "%.2f");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f, "%.2f");
+
+			ImGui::EndGroup();
+			ImGui::EndGroup();
+
+			ImGui::EndChild();
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+
+		ImGui::PopStyleVar();
+	}
+
+	// --- 3. PHYSICS SECTION WITH MODERN TOGGLES ---
+	if (registry.any_of<RigidBody>(m_SelectedEntity))
+	{
+		bool physicsOpen = ImGui::CollapsingHeader("󰊤 Physics", ImGuiTreeNodeFlags_DefaultOpen);
+
+		// Component toolbar
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###PhysicsMenu")) {
+			ImGui::OpenPopup("PhysicsContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("PhysicsContextMenu")) {
+			if (ImGui::MenuItem("Remove Component")) {
+				registry.remove<RigidBody>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (physicsOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& rb = registry.get<RigidBody>(m_SelectedEntity);
+
+			// Modern toggle switches
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Gravity");
+			ImGui::SameLine(120);
+
+			// Custom toggle style
+			ImGui::PushStyleColor(ImGuiCol_Button, rb.useGravity ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+			if (ImGui::Button(rb.useGravity ? "ON" : "OFF", ImVec2(50, 0))) {
+				rb.useGravity = !rb.useGravity;
+			}
+			ImGui::PopStyleColor();
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Kinematic");
+			ImGui::SameLine(120);
+
+			ImGui::PushStyleColor(ImGuiCol_Button, rb.isKinematic ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+			if (ImGui::Button(rb.isKinematic ? "ON" : "OFF", ImVec2(50, 0))) {
+				rb.isKinematic = !rb.isKinematic;
+			}
+			ImGui::PopStyleColor();
+
+			// Mass property
+			static float mass = 1.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Mass");
+			ImGui::SameLine(120);
+			ImGui::SetNextItemWidth(150);
+			ImGui::DragFloat("##mass", &mass, 0.1f, 0.01f, 1000.0f, "%.2f kg");
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+	}
+
+	// --- 4. CAMERA COMPONENT ---
+	if (registry.any_of<Camera>(m_SelectedEntity))
+	{
+		bool cameraOpen = ImGui::CollapsingHeader("󰀙 Camera", ImGuiTreeNodeFlags_DefaultOpen);
+
+		ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		if (ImGui::SmallButton("󰍎###CameraMenu")) {
+			ImGui::OpenPopup("CameraContextMenu");
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::BeginPopup("CameraContextMenu")) {
+			if (ImGui::MenuItem("Set as Main Camera")) {
+				m_ActiveScene->setCameraType(CameraType::Player);
+			}
+			if (ImGui::MenuItem("Remove Component")) {
+				registry.remove<Camera>(m_SelectedEntity);
+			}
+			ImGui::EndPopup();
+		}
+
+		if (cameraOpen)
+		{
+			ImGui::Indent(8);
+
+			auto& cam = registry.get<Camera>(m_SelectedEntity);
+
+			// Camera presets
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Preset");
+			ImGui::SameLine(80);
+
+			if (ImGui::Button("Perspective", ImVec2(90, 0))) {
+				// Set perspective
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Orthographic", ImVec2(90, 0))) {
+				// Set orthographic
+			}
+
+			// FOV slider
+			static float fov = 60.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("FOV");
+			ImGui::SameLine(80);
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat("##fov", &fov, 10.0f, 120.0f, "%.1f°");
+
+			// Clipping planes
+			static float nearPlane = 0.1f;
+			static float farPlane = 1000.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Clipping");
+			ImGui::SameLine(80);
+			ImGui::SetNextItemWidth(70);
+			ImGui::DragFloat("Near", &nearPlane, 0.01f, 0.01f, 10.0f, "%.2f");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(70);
+			ImGui::DragFloat("Far", &farPlane, 1.0f, 10.0f, 10000.0f, "%.1f");
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+	}
+
+	ImGui::EndChild();
+
+	// --- 5. ADD COMPONENT BUTTON (MODERN FLOATING STYLE) ---
+	ImGui::Separator();
+	ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
+
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
+
+	if (ImGui::Button("+ Add Component", ImVec2(150, 28))) {
+		ImGui::OpenPopup("AddComponentPopup");
+	}
+
+	ImGui::PopStyleColor(3);
+
+	// Modern component search popup
+	if (ImGui::BeginPopup("AddComponentPopup"))
+	{
+		ImGui::Text("Search Components");
+		ImGui::Separator();
+
+		static char searchBuffer[128] = "";
+		ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+
+		ImGui::Separator();
+
+		// Component categories
+		if (ImGui::BeginMenu("Rendering")) {
+			if (ImGui::MenuItem("Mesh Renderer")) {}
+			if (ImGui::MenuItem("Model")) {}
+			if (ImGui::MenuItem("Light")) {}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Physics")) {
+			if (ImGui::MenuItem("RigidBody")) {
+				if (!registry.any_of<RigidBody>(m_SelectedEntity)) {
+					auto trans = registry.get<Transform>(m_SelectedEntity).position;
+					registry.emplace<RigidBody>(m_SelectedEntity, RigidBodyDesc(trans));
+				}
+			}
+			if (ImGui::MenuItem("Collider")) {
+				if (!registry.any_of<Collider>(m_SelectedEntity)) {
+					registry.emplace<Collider>(m_SelectedEntity, ColliderDesc());
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Camera")) {
+			if (ImGui::MenuItem("Camera")) {
+				if (!registry.any_of<Camera>(m_SelectedEntity)) {
+					registry.emplace<Camera>(m_SelectedEntity, glm::vec4(0.f));
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Effects")) {
+			if (ImGui::MenuItem("Color")) {
+				if (!registry.any_of<Color>(m_SelectedEntity)) {
+					registry.emplace<Color>(m_SelectedEntity, glm::vec4(0.f));
+				}
+			}
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndPopup();
 	}
 
 	ImGui::End();
 }
+
 void AppUI::DrawMenuBar()
 {
 	if (ImGui::BeginMainMenuBar())

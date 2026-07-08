@@ -35,11 +35,9 @@ public:
 class AppUI {
 public:
 	void Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager& p_WindowManagar);
-	void NewFrame();
 
 	// This is where your 70% of code goes!
 	void Update();
-
 	void Render();
 	void Shutdown();
 

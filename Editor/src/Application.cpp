@@ -8,7 +8,7 @@
 
 Application::Application()
 {
-	
+
 }
 
 Application::~Application()
@@ -174,7 +174,7 @@ void Application::Run()
 		m_Renderer.RenderScene(m_ActiveScene, *ptrShdr);
 		ImGui::End();
 		ImGui::End();
-		
+
 
 		m_WindowManager.EndFrame();
 
