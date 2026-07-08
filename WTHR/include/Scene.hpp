@@ -77,7 +77,11 @@ public:
 	void setCameraType(CameraType type) { m_CameraType = type; }
 	std::unordered_map<std::string, Texture>& GetTextures() { return m_Textures; }; // path or name → texture data
 
-
+	void registerLua(sol::state& lua) {
+		lua.set_function("CreateBullet", [this]() {
+			CreateBullet();
+			});
+	}
 
 	void CreateCubeGrid(int width, int length, int height, glm::vec3 pos = glm::vec3(0.f))
 	{

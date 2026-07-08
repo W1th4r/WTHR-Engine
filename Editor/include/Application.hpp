@@ -30,7 +30,6 @@ protected:
 
 protected:
 	WindowManager m_WindowManager;
-	InputManager m_Input;
 	Renderer m_Renderer;
 	PhysicsWorld m_World;
 	AppUI m_UI;

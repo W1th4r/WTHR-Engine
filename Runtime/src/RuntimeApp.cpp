@@ -19,6 +19,14 @@ void RuntimeApp::Init() {
 
 	m_Scene->Load("Default.sce");
 
+	for (auto& scrip : m_Scene->m_Script.scripts)
+	{
+		for (auto& instance : m_Scene->m_Script.scripts)
+		{
+			instance.second.isActive = true;
+		}
+	}
+
 	m_Renderer = std::make_shared<Renderer>();
 	spdlog::info("Scene initialized with test cubes");
 }

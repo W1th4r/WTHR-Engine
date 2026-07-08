@@ -35,13 +35,13 @@ public:
     // Attach scripts to objects
     void attachScript(const std::string& name, entt::entity entity);
     void detachScript(const std::string& name, entt::entity entity, entt::registry& registry);
-
     // Run all scripts per-frame
     void update(float dt);
+    std::vector<std::string> getTransformDebugList(entt::registry& registry);
+    void restartScripts();
 
     // Bind engine API / objects
     void bindTransforms(entt::registry& registry);
-
     // Optional: redirect Lua print
     void setPrintCallback(std::function<void(const std::string&)> callback);
 
@@ -50,6 +50,9 @@ public:
 
     // Store all script sources, filepath, script
     std::unordered_map<std::string, ScriptInstance> scripts;
+
+    //Store what entites are bound incase of adding new ones debug purpose
+    std::unordered_set<uint32_t> m_BoundEntities;
 
     // Track which scripts are attached to which objects
     std::unordered_map<entt::entity, std::vector<std::string>> objectScripts;

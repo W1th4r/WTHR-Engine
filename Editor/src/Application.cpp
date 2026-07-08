@@ -8,7 +8,7 @@
 
 Application::Application()
 {
-
+	
 }
 
 Application::~Application()
@@ -71,11 +71,10 @@ bool Application::Init()
 	glfwSetWindowSizeCallback(m_WindowManager.GetWindow(), WindowSizeCallback);
 	glfwSetDropCallback(m_WindowManager.GetWindow(), drop_callback);
 
-	m_Input.setWindow(m_WindowManager.GetWindow());
+	InputManager::SetWindow(m_WindowManager.GetWindow());
 	if (m_WindowManager.GetWindow() == nullptr) __debugbreak();
 
 	m_World.SetScene(&m_ActiveScene);
-	m_Renderer.m_Editor.set(&m_ActiveScene.m_Script);
 
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	GLFWwindow* workerWindow = glfwCreateWindow(1, 1, "GPU Worker", nullptr, m_WindowManager.GetWindow());
@@ -83,8 +82,8 @@ bool Application::Init()
 
 	GLFWwindow* contextA = m_WindowManager.GetWindow();
 
-	m_UI.Initialize(m_ActiveScene, m_Renderer, m_Input, m_WindowManager);
 	m_ActiveScene.SetWorker(m_WindowManager.GetWindow());
+	m_UI.Initialize(m_ActiveScene, m_Renderer, m_WindowManager);
 
 	return true;
 }
@@ -142,7 +141,7 @@ void Application::Run()
 
 	ImGuiIO& io = ImGui::GetIO();
 
-
+	glfwMaximizeWindow(m_WindowManager.GetWindow());
 
 	auto ptrShdr = std::make_shared<Shader>("shaders/default.vert", "shaders/default.frag");
 	//m_Compiler.CookModel(std::string(),std::string("cooked"));
@@ -158,11 +157,12 @@ void Application::Run()
 		m_World.stepSimulation(.016f);
 
 		m_WindowManager.PollEvents();
-		m_Input.Update();
+		InputManager::Update();
 		m_WindowManager.BeginFrame();
 
-
 		m_UI.Update();
+
+
 		m_UI.Render();
 
 
@@ -173,12 +173,8 @@ void Application::Run()
 			ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
 		m_Renderer.RenderScene(m_ActiveScene, *ptrShdr);
 		ImGui::End();
-
-
-		auto& registry = m_ActiveScene.GetRegistry();
-
-		m_Renderer.m_Editor.draw(registry);
-		m_Renderer.m_Editor.drawDebugPanel(registry);
+		ImGui::End();
+		
 
 		m_WindowManager.EndFrame();
 

@@ -6,8 +6,6 @@
 #include "Application.hpp"
 #include <chrono>
 
-
-
 std::filesystem::path FileDialog::OpenFile()
 {
 	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -104,7 +102,6 @@ std::filesystem::path FileDialog::OpenFolder()
 	CoUninitialize();
 	return resultPath;
 }
-
 
 
 int nextGroupId = 0; // keep track somewhere in your editor state
@@ -302,15 +299,15 @@ static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 }
 
 
-void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer,
-	InputManager& p_Input, WindowManager& p_WindowManagar)
+void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager& p_WindowManagar)
 {
 	m_ActiveScene = &p_ActiveScene;
 	m_Renderer = &p_Renderer;
-	m_Input = &p_Input;
+
 	m_WindowManager = &p_WindowManagar;
 
 	m_Editor.SetScene(m_ActiveScene);
+	m_Scripts.set(&m_ActiveScene->m_Script);
 }
 void AppUI::NewFrame()
 {
@@ -529,7 +526,6 @@ void AppUI::Update()
 		ImGui::EndPopup();
 	}
 
-	const char* label = "Play";
 
 	// Get the current window size
 	ImVec2 windowSize = ImGui::GetContentRegionAvail(); // available size in the window
@@ -548,7 +544,7 @@ void AppUI::Update()
 		//Iterate all scritps and start
 
 		m_Editor.Play();
-
+		m_ActiveScene->m_Script.restartScripts();
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Stop", buttonSize)) {
@@ -562,18 +558,29 @@ void AppUI::Update()
 		m_Editor.Pause();
 
 	}
-	ImGui::SetCursorPosX(ImGui::GetWindowSize().x/2);
+	ImGui::SetCursorPosX(ImGui::GetWindowSize().x / 2);
 	bool l_isPlaying = m_Editor.IsPlaying();
 	if (l_isPlaying)
 		ImGui::Text("Scene is playing");
 	else ImGui::Text("Scene is stopped");
 
 }
+
 void AppUI::Render()
 {
 	auto& registry = m_ActiveScene->GetRegistry();
+	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
+	this->RenderEcs();
+	this->RenderInspectors();
+	this->RenderScripts();
+	this->RenderObjectInspector();
+	this->DrawMenuBar();
+}
 
+void AppUI::RenderEcs()
+{
+	auto& registry = m_ActiveScene->GetRegistry();
 	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
 	ImGui::Begin("ECS");
@@ -844,6 +851,12 @@ void AppUI::Render()
 	ImGui::End();
 
 
+}
+
+void AppUI::RenderInspectors()
+{
+	auto& registry = m_ActiveScene->GetRegistry();
+	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
 	ImGui::Begin("Texture Inspector");
 
@@ -882,6 +895,8 @@ void AppUI::Render()
 			Texture texture(filepath.string(), "texture_diffuse");
 
 			m_Textures.insert({ filepath.string(), texture });
+
+
 
 
 			currentTextureKey = filepath.string();
@@ -931,19 +946,11 @@ void AppUI::Render()
 
 	if (ImGui::Button(("Load Model")))
 	{
-		//	ImGui::OpenPopup(("Load Model"));
-
 		std::filesystem::path filepath = FileDialog::OpenFile();
 		if (filepath.empty())
-		{
 			spdlog::error("Failed to load model or canceled by user");
-		}
 		else
-		{
-
 			m_ActiveScene->CreateModel(filepath.string(), glm::vec4(1.0f));
-		}
-
 	}
 	if (ImGui::BeginPopupModal(("Load Model"), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 	{
@@ -1032,17 +1039,111 @@ void AppUI::Render()
 		});
 
 	ImGui::End();
-
-	ImGui::End(); // end dockspace
 }
 
-void AppUI::DrawMainMenuBar()
+void AppUI::RenderScripts()
 {
-}
-void AppUI::DrawSidebar(AppSettings& settings)
-{
-}
-void AppUI::DrawDebugConsole()
-{
+	auto& registry = m_ActiveScene->GetRegistry();
+
+	m_Scripts.draw(registry, *m_ActiveScene);
+	m_Scripts.drawDebugPanel(registry);
 }
 
+void AppUI::RenderObjectInspector()
+{
+	ImGui::Begin("Object Inspector");
+	if (static_cast<UINT32>(ent) != 0)
+	{
+		ImGui::Text("Enemy selected %d",ent);
+		auto& registry = m_ActiveScene->GetRegistry();
+		auto& object = registry.get<Transform>(ent);
+		ImGui::DragFloat3("Position", &object.position.x, 0.1f);
+
+	}
+	else
+	{
+
+	}
+
+	ImGui::End();
+}
+void AppUI::DrawMenuBar()
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
+				m_ActiveScene->GetRegistry().clear();
+				// Reset scene defaults here
+			}
+
+			if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+				std::filesystem::path path = FileDialog::OpenFile(); // Assuming this opens a .sce
+				if (!path.empty()) m_ActiveScene->Load(path);
+			}
+
+			if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+				// You previously used "Default.sce", better to use a path variable
+				std::filesystem::path path = std::filesystem::current_path() / "Default.sce";
+				m_ActiveScene->Save(path);
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Import Model...")) {
+				std::filesystem::path filepath = FileDialog::OpenFile();
+				if (!filepath.empty()) {
+					m_ActiveScene->CreateModel(filepath.string(), glm::vec4(1.0f));
+				}
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Exit", "Alt+F4")) {
+				// Trigger application close (e.g., glfwSetWindowShouldClose)
+			}
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Edit"))
+		{
+			if (ImGui::MenuItem("Undo", "Ctrl+Z", false, false)) {} // Placeholder
+			if (ImGui::MenuItem("Redo", "Ctrl+Y", false, false)) {} // Placeholder
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Clear Registry")) {
+				m_ActiveScene->GetRegistry().clear();
+			}
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("View"))
+		{
+			// Use these to toggle your panel visibility if you add boolean flags
+			static bool showECS = true;
+			ImGui::MenuItem("ECS Panel", nullptr, &showECS);
+
+			static bool showPerf = true;
+			ImGui::MenuItem("Performance Overlay", nullptr, &showPerf);
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Help"))
+		{
+			if (ImGui::MenuItem("About")) { /* Show a modal or version info */ }
+			ImGui::EndMenu();
+		}
+
+		// Quick Stats on the far right
+		float width = ImGui::GetWindowWidth();
+		ImGui::SetCursorPosX(width - 150);
+		ImGui::TextDisabled("%.1f FPS", ImGui::GetIO().Framerate);
+
+		ImGui::EndMainMenuBar();
+	}
+}

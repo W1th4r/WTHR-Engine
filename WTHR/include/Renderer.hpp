@@ -30,7 +30,6 @@ public:
     void setSize(int x, int y) { width = x; height = y; }
 
     ImGuizmo::OPERATION gizmoType;
-    ScriptEditor m_Editor;
 private:
     GLuint m_VAO = 0;
     GLuint m_VBO = 0;
