@@ -14,16 +14,16 @@ void Editor::Play()
 	}
 	//Start scene normally
 
-	if (m_SceneState == State::Edit)
+	if (m_ActiveScene->m_SceneState== State::Edit)
 	{
 		m_BufferReg = m_ActiveScene->GetRegistrySnapshot();
 		for (auto& instance : m_ActiveScene->m_Script.scripts)
 		{
 			instance.second.isActive = true;
 		}
-		m_SceneState == State::Playing;
+		m_ActiveScene->m_SceneState == State::Playing;
 	}
-	if (m_SceneState == State::Paused)
+	if (m_ActiveScene->m_SceneState == State::Paused)
 	{
 		for (auto& instance : m_ActiveScene->m_Script.scripts)
 		{
@@ -31,7 +31,7 @@ void Editor::Play()
 		}
 	}
 
-	m_SceneState = State::Playing;
+	m_ActiveScene->m_SceneState = State::Playing;
 	//TODO same for physics
 
 }
@@ -43,14 +43,14 @@ void Editor::Stop()
 		return;
 	}
 
-	if (m_SceneState != State::Edit)
+	if (m_ActiveScene->m_SceneState != State::Edit)
 	{
 		m_ActiveScene->SetRegistry(m_BufferReg);
 		for (auto& instance : m_ActiveScene->m_Script.scripts)
 		{
 			instance.second.isActive = false;
 		}
-		m_SceneState = State::Edit;
+		m_ActiveScene->m_SceneState = State::Edit;
 	}
 
 }void Editor::Pause()
@@ -61,13 +61,13 @@ void Editor::Stop()
 		return;
 	}
 
-	if (m_SceneState == State::Playing)
+	if (m_ActiveScene->m_SceneState == State::Playing)
 	{
 		for (auto& instance : m_ActiveScene->m_Script.scripts)
 		{
 			instance.second.isActive = false;
 		}
-		m_SceneState = State::Paused;
+		m_ActiveScene->m_SceneState = State::Paused;
 	}
 
 }

@@ -8,7 +8,7 @@ struct RigidBodyDesc {
     glm::vec3 velocity{ 0.0f };
     float mass = 1.0f;
     bool isKinematic = false;
-    bool useGravity = true;
+    bool useGravity = false;
 };
 
 class RigidBody {

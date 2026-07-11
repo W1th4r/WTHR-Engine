@@ -57,103 +57,126 @@ void Renderer::Clear(const glm::vec3& color)
 	glClearColor(color.r, color.g, color.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
-
 void Renderer::RenderScene(Scene& scene, Shader& shader)
 {
-	// Cache camera and projection matrix
+	auto& registry = scene.GetRegistry();
 	Camera& camera = scene.GetCamera();
-	auto view = camera.GetViewMatrix();
 
-	// Cache projection matrix - compute once
-	static float nearPlane = 0.1f;
-	static float farPlane = 100.f;
-	static glm::mat4 projection = glm::perspective(
+	// Recalculate projection dynamically to handle window resizing safely
+	glm::mat4 projection = glm::perspective(
 		glm::radians(45.f),
 		static_cast<float>(width) / static_cast<float>(height),
-		nearPlane, farPlane
+		0.1f, 100.f
 	);
 
-	auto& registry = scene.GetRegistry();
-
-	// Get uniform locations once
-	GLint useModelLoc = glGetUniformLocation(shader.ID, "useModel");
-	GLint useTextureLoc = glGetUniformLocation(shader.ID, "useTexture");
-	GLint useColorLoc = glGetUniformLocation(shader.ID, "useColor");
-	GLint uColorLoc = glGetUniformLocation(shader.ID, "uColor");
-
+	// 1. Bind Shader and Upload Global Uniforms
 	shader.use();
-	shader.setMat4("view", view);
+	shader.setMat4("view", camera.GetViewMatrix());
 	shader.setMat4("projection", projection);
+	shader.setVec3("viewPos", camera.Position); // Matches uniform vec3 viewPos
 
-	// Render MeshComponents
+	// 2. Upload Directional Light Uniforms (Matches struct Light dirLight)
+	shader.setVec3("dirLight.direction",this->m_SunDirection);
+	shader.setVec3("dirLight.ambient", this->m_SunAmbient);
+	shader.setVec3("dirLight.diffuse", this->m_SunDiffuse);
+	shader.setVec3("dirLight.specular", this->m_SunSpecular);
+
+	int pointLightCount = 0;
+	const int MAX_POINT_LIGHTS = 16;
+
+	auto lightView = registry.view<PointLight, Transform>();
+	lightView.each([&](auto entity, auto& light, auto& transform) {
+		if (pointLightCount >= MAX_POINT_LIGHTS) return;
+
+		// Construct the uniform array string dynamically (e.g., "pointLights[0].color")
+		std::string baseName = "pointLights[" + std::to_string(pointLightCount) + "].";
+
+		// Grab position straight out of the light's Transform component
+		shader.setVec3(baseName + "position", transform.position);
+		shader.setVec3(baseName + "color", light.color);
+		shader.setFloat(baseName + "intensity", light.intensity);
+		shader.setFloat(baseName + "linear", light.linear);
+		shader.setFloat(baseName + "quadratic", light.quadratic);
+
+		pointLightCount++;
+		});
+	shader.setInt("activePointLightCount", pointLightCount);
+
+
+	// ==========================================
+	// PASS 1: Render MeshComponents
+	// ==========================================
+	shader.setBool("useModel", false);
+
 	registry.view<MeshComponent, Transform>().each([&](auto entity, auto& meshComp, auto& transform) {
-		// Skip if mesh is null
+		// Skip player/camera entity from drawing inside its own head
+		if (registry.all_of<Camera>(entity)) return;
 		if (!meshComp.mesh) return;
 
-		// Build model matrix
-		glm::mat4 model = BuildModelMatrix(transform);
-		shader.setMat4("model", model);
+		shader.setMat4("model", BuildModelMatrix(transform));
 
-		// Check for Color component once
-		bool hasColor = scene.HasComponent<Color>(entity);
+		// Single-lookup check for optional Color component
+		Color* color = registry.try_get<Color>(entity);
 		bool hasTextures = !meshComp.mesh->mesh.textures.empty();
 
-		// Set uniform flags
-		glUniform1i(useModelLoc, 0); // Not a ModelComponent
-
-		if (!hasTextures && hasColor) {
-			// Only color, no textures
-			glUniform1i(useTextureLoc, 0);
-			glUniform1i(useColorLoc, 1);
-
-			auto& color = scene.GetComponent<Color>(entity);
-			glUniform4f(uColorLoc,
-				color.value.r, color.value.g,
-				color.value.b, color.value.a);
-		}
-		else if (hasTextures) {
-			// Has textures, may have color
-			glUniform1i(useTextureLoc, 1);
-			glUniform1i(useColorLoc, hasColor ? 1 : 0);
-
-			if (hasColor) {
-				auto& color = scene.GetComponent<Color>(entity);
-				glUniform4f(uColorLoc,
-					color.value.r, color.value.g,
-					color.value.b, color.value.a);
+		// Material state evaluation for your Uber Shader toggles
+		if (hasTextures)
+		{
+			shader.setBool("useTexture", true);
+			shader.setBool("useColor", color != nullptr);
+			if (color)
+			{
+				shader.setVec4("uColor", color->value);
 			}
 		}
-		else {
-			// No textures, no color
-			glUniform1i(useTextureLoc, 0);
-			glUniform1i(useColorLoc, 0);
-		}
-		//if the entity has a camera it's a player so don't render it
-		if (scene.HasComponent<Camera>(entity))
+		else if (color)
 		{
-			auto& camera = scene.GetComponent<Camera>(entity);
-			camera.Position = transform.position;
+			shader.setBool("useTexture", false);
+			shader.setBool("useColor", true);
+			shader.setVec4("uColor", color->value);
 		}
 		else
-			meshComp.mesh->Draw(shader);
+		{
+			// Fallback flat white if completely empty
+			shader.setBool("useTexture", false);
+			shader.setBool("useColor", true);
+			shader.setVec4("uColor", glm::vec4(1.0f));
+		}
+
+		// Enable lighting calculations for standard meshes
+		bool isLightSource = registry.any_of<PointLight>(entity);
+
+		shader.setBool("useLighting", !isLightSource);
+
+		shader.setFloat("materialShininess", 32.0f); // Default shininess factor (or pull from a component)
+
+		// Assimp mesh draw routine binds texture_diffus	e1 (Slot 0) and texture_specular1 (Slot 1)
+		meshComp.mesh->Draw(shader);
 		});
 
-	// Render ModelComponents
-	registry.view<ModelComponent, Transform>().each([&](auto entity, ModelComponent& modelComp, auto& transform) {
-		// Skip if not loaded
-		if (!modelComp.model.get()->IsLoaded()) return;
+	// ==========================================
+	// PASS 2: Render ModelComponents
+	// ==========================================
+	shader.setBool("useModel", true);
+	shader.setBool("useTexture", true);
+	shader.setBool("useColor", false);
+	shader.setBool("useLighting", true);
+	shader.setFloat("materialShininess", 32.0f);
 
-		glm::mat4 model = BuildModelMatrix(transform);
-		shader.setMat4("model", model);
+	registry.view<ModelComponent, Transform>().each([&](auto entity, auto& modelComp, auto& transform) {
+		if (!modelComp.model || !modelComp.model->IsLoaded()) return;
 
-		glUniform1i(useModelLoc, 1);
-		modelComp.model.get()->Draw(shader);
+		shader.setMat4("model", BuildModelMatrix(transform));
+		modelComp.model->Draw(shader);
 		});
 
-	// Render Gizmo if needed (consider separating this into its own function)
+	// ==========================================
+	// PASS 3: Debug / Gizmos
+	// ==========================================
+	// Turn off lighting calculations so gizmos are completely unlit full-color
+	shader.setBool("useLighting", false);
 	RenderGizmo(scene, shader);
 }
-
 // Helper function for building model matrices
 glm::mat4 Renderer::BuildModelMatrix(const Transform& transform)
 {
@@ -168,7 +191,7 @@ glm::mat4 Renderer::BuildModelMatrix(const Transform& transform)
 // Separate function for gizmo rendering
 void Renderer::RenderGizmo(Scene& scene, Shader& shader)
 {
-	if (!pixel.ObjectID) return;
+	if (!pixel.ObjectID == -1) return;
 
 	entt::entity clickedEntity = static_cast<entt::entity>(pixel.ObjectID);
 
@@ -226,6 +249,8 @@ void Renderer::RenderPicking(Scene& scene, int x, int y)
 	glViewport(0, 0, width, height);
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	int clearValue = -1;
+	glClearBufferiv(GL_COLOR, 0, &clearValue);
 
 	pickingShader.use();
 
@@ -276,7 +301,7 @@ void Renderer::RenderPicking(Scene& scene, int x, int y)
 	m_ObjectPicking.Unbind();
 
 	// Convert to entt entity safely
-	if (pixel.ObjectID != 0)
+	if (pixel.ObjectID != -1)
 	{
 		entt::entity clickedEntity = static_cast<entt::entity>(pixel.ObjectID);
 		spdlog::debug("Clicked entity ID: {}", pixel.ObjectID);
@@ -296,7 +321,7 @@ void Renderer::HandlePickingClick(Scene& scene, double mouseX, double mouseY, en
 	pixel.Print(); // Optional debug output
 
 	// 2. If no object was clicked, return early
-	if (pixel.ObjectID == 0)
+	if (pixel.ObjectID == -1)
 		return;
 
 	// 3. Convert back to entt::entity ID

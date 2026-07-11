@@ -46,6 +46,7 @@ Script::Script() {
 		InputManager::GetMousePosition(x, y);
 		return glm::vec2{ (float)x, (float)y };
 		});
+
 	
 	lua.set("KEY_W", GLFW_KEY_W);
 	lua.set("KEY_A", GLFW_KEY_A);
@@ -266,10 +267,11 @@ void Script::bindTransforms(entt::registry& registry) {
 
 
 	lua.new_usertype<glm::vec3>("Vec3",
+		sol::constructors<glm::vec3(), glm::vec3(float, float, float)>(),
 		"x", &glm::vec3::x,
 		"y", &glm::vec3::y,
 		"z", &glm::vec3::z
-	);
+	);;
 
 	// 2️⃣ Expose Transform type
 	lua.new_usertype<Transform>("Transform",

@@ -156,16 +156,37 @@ struct GroupComponent
 	int id;
 };
 struct Bullet {
-	Bullet(glm::vec3 pos, glm::vec3 vec, float ra, bool ac)
-	{
-		position = pos;
-		velocity = vec * bulletSpeed;
-		radius = ra;
-		active = ac;
-	}
 	glm::vec3 position;
 	glm::vec3 velocity;
 	float bulletSpeed = 10.f;
 	float radius;
 	bool active;
+
+	// Use an initializer list to guarantee variables are set correctly
+	Bullet(glm::vec3 pos, glm::vec3 dir, float ra, bool ac)
+		: position(pos)
+		, bulletSpeed(10.f) // Set the default speed first
+		, velocity(dir * 10.f) // Multiply direction by speed cleanly
+		, radius(ra)
+		, active(ac)
+	{
+	}
+};
+
+struct Material {
+	uint32_t diffuse;
+	uint32_t specular;
+	float shininess;
+};
+struct PointLight {
+	// Position is handled by your ECS Transform component, 
+	// so we don't duplicate it here!
+
+	glm::vec3 color = glm::vec3(1.0f); // Combined ambient/diffuse base color
+	float intensity = 1.0f;            // Brightness multiplier
+
+	// Attenuation factors (Controls how light fades over distance)
+	float constant = 1.0f;   // Usually kept at 1.0
+	float linear = 0.09f;  // Controls fade over medium distance
+	float quadratic = 0.032f; // Controls fade over long distance
 };

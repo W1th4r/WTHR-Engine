@@ -148,17 +148,20 @@ void Mesh::Draw(Shader& shader) {
 	unsigned int normalNr = 1;
 	unsigned int heightNr = 1;
 
-
+	// 1. Multi-context tracking (Clean approach for editor/game views!)
 	uintptr_t contextID = reinterpret_cast<uintptr_t>(glfwGetCurrentContext());
-
-
-	if (VAOs.find(contextID) == VAOs.end())
+	if (VAOs.find(contextID) == VAOs.end()) {
 		setupMeshForContext(contextID);
+	}
 	unsigned int VAO = VAOs[contextID];
 
+	// 2. FIXED: Bind the shader BEFORE updating its uniform texture slots
+	glUseProgram(shader.ID);
 
+	// 3. Bind Textures and set Samplers
 	for (unsigned int i = 0; i < textures.size(); i++) {
 		glActiveTexture(GL_TEXTURE0 + i);
+
 		std::string number;
 		std::string name = textures[i].type;
 
@@ -167,30 +170,38 @@ void Mesh::Draw(Shader& shader) {
 		else if (name == "texture_normal") number = std::to_string(normalNr++);
 		else if (name == "texture_height") number = std::to_string(heightNr++);
 
+		// Safely uploads to the active program bound above
 		glUniform1i(glGetUniformLocation(shader.ID, (name + number).c_str()), i);
 		glBindTexture(GL_TEXTURE_2D, textures[i].id);
 	}
 
+	// 4. Bind geometry
 	glBindVertexArray(VAO);
-	glUseProgram(shader.ID);
 
-	GLint currentVAO = 0, currentVBO = 0, currentEBO = 0;
+#ifdef _DEBUG
+	// Keep the safety validation tracking restricted ONLY to debug builds
+	GLint currentVAO = 0, currentEBO = 0;
 	glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &currentVAO);
-	glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &currentVBO);
 	glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &currentEBO);
-	
 	if (currentVAO == 0 || currentEBO == 0) {
 		spdlog::error("Cannot draw Mesh: VAO or EBO uninitialized!");
 		return;
 	}
-	// Check currently bound buffers and VAO
-	SafeDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
-	glBindVertexArray(0);
-	glBindTexture(GL_TEXTURE_2D, 0);
+#endif
 
+	// 5. High performance draw call without CPU-GPU syncing pipeline stalls
+	SafeDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
+
+	// 6. Cleanup pipeline state
+	glBindVertexArray(0);
+
+	// Reset the active texture slots we messed with so we don't leak state leaks
+	for (unsigned int i = 0; i < textures.size(); i++) {
+		glActiveTexture(GL_TEXTURE0 + i);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 	glActiveTexture(GL_TEXTURE0);
 }
-
 //----------------------//
 // Setup Mesh
 //----------------------//
