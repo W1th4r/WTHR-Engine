@@ -72,7 +72,12 @@ bool Application::Init()
 	glfwSetDropCallback(m_WindowManager.GetWindow(), drop_callback);
 
 	InputManager::SetWindow(m_WindowManager.GetWindow());
-	if (m_WindowManager.GetWindow() == nullptr) __debugbreak();
+	if (m_WindowManager.GetWindow() == nullptr)
+	{
+		
+		spdlog::error("Failed to create GLFW window");
+		return false;
+	}
 
 	m_World.SetScene(&m_ActiveScene);
 

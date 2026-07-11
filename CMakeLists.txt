@@ -17,6 +17,8 @@ project(WTHR LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(ASSIMP_BUILD_WERROR OFF CACHE BOOL "Build assimp with -Werror" FORCE)
+add_compile_options(-Wno-unknown-warning-option)
 
 # MSVC specific tweaks
 if(MSVC)
@@ -28,6 +30,16 @@ endif()
 if(MSVC)
   set(CMAKE_C_COMPILER_LAUNCHER "")
   set(CMAKE_CXX_COMPILER_LAUNCHER "")
+endif()
+# --- ADD THIS BLOCK RIGHT AFTER YOUR ASSIMP SETTINGS ---
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-fexperimental-library)
+    add_compile_options(-Wno-error=deprecated-declarations)
+      add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>)
+    add_link_options(-stdlib=libc++)
+endif()
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
 endif()
 
 # Vendor libraries
@@ -63,8 +75,14 @@ add_library(ImGuizmo vendor/ImGuizmo/ImGuizmo.cpp)
 target_include_directories(ImGuizmo PUBLIC vendor/ImGuizmo vendor/imgui)
 target_link_libraries(ImGuizmo PUBLIC imgui glm)
 
+
 # Add WTHR app
 add_subdirectory(WTHR)
+
+if(UNIX AND NOT APPLE)
+  target_link_libraries(WTHR PRIVATE ${X11_LIBRARIES})
+endif()
+
 add_subdirectory(Physics)
 add_subdirectory(Editor)
 add_subdirectory(Runtime)

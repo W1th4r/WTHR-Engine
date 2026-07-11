@@ -1,5 +1,5 @@
 #include <pch.hpp>
-#include "model.hpp"
+#include "Model.hpp"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.hpp>
 #include <filesystem>
@@ -9,23 +9,23 @@ Model::Model() : gammaCorrection(false) {}
 
 Model::Model(const Model& other)
 {
-	__debugbreak(); // breaks when copy constructor is called
+	//TODO ADD DEBUGBREAK // breaks when copy constructor is called
 }
 
 Model& Model::operator=(const Model& other)
 {
-	__debugbreak(); // breaks when copy assignment happens
+	//TODO ADD DEBUGBREAK // breaks when copy assignment happens
 	return *this;
 }
 
 Model::Model(Model&& other) noexcept
 {
-	__debugbreak(); // breaks when move constructor is called
+	//TODO ADD DEBUGBREAK // breaks when move constructor is called
 }
 
 Model& Model::operator=(Model&& other) noexcept
 {
-	__debugbreak(); // breaks when move assignment happens
+	//TODO ADD DEBUGBREAK // breaks when move assignment happens
 	return *this;
 }
 

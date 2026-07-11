@@ -9,6 +9,7 @@
 # Build output
 out/
 bin/
+build/
 Debug/
 Release/
 x64/

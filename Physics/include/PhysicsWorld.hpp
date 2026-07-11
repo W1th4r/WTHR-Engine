@@ -1,8 +1,19 @@
 #pragma once
 #include <RigidBody.hpp>
 #include <Collider.hpp>
-#include <Callbacks.hpp>
 #include <Scene.hpp>
+#include <functional>
+#include <cstdint>
+
+using RigidBodyID = uint32_t;
+using ColliderID = uint32_t;
+
+
+using CollisionCallback = std::function<void(RigidBodyID a, RigidBodyID b)>;
+
+
+using TriggerCallback = std::function<void(RigidBodyID a, ColliderID trigger)>;
+
 
 class PhysicsWorld {
 public:

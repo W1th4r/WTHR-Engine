@@ -1,5 +1,5 @@
 ﻿// scripts.cpp
-#include "scripts.hpp"
+#include <Scripts.hpp>
 #include <fstream>
 #include <iostream>
 #include <algorithm>

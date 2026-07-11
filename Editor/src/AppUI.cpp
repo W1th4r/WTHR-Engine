@@ -5,7 +5,7 @@
 #include "WindowManager.hpp"
 #include "Application.hpp"
 #include <chrono>
-
+#ifdef _WIN32
 std::filesystem::path FileDialog::OpenFile()
 {
 	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -103,7 +103,19 @@ std::filesystem::path FileDialog::OpenFolder()
 	return resultPath;
 }
 
-
+#endif
+#ifdef __linux__
+std::filesystem::path FileDialog::OpenFile()
+{
+	// Implement Linux-specific file dialog logic here
+	return std::filesystem::path();
+}
+std::filesystem::path FileDialog::OpenFolder()
+{
+	// Implement Linux-specific file dialog logic here
+	return std::filesystem::path();
+}
+#endif
 int nextGroupId = 0; // keep track somewhere in your editor state
 static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 {
