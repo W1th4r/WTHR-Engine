@@ -74,7 +74,7 @@ void ScriptEditor::draw(entt::registry& registry,Scene& p_Scene) {
 	ImGui::Separator();
 
 	// --- Load existing script by filename ---
-	ImGui::InputText("Load Script (no .lua)", loadScriptName, sizeof(loadScriptName));
+	ImGui::InputText("Load Script", loadScriptName, sizeof(loadScriptName));
 	ImGui::SameLine();
 	if (ImGui::Button("Load")) {
 		std::string filename(loadScriptName);
@@ -82,7 +82,9 @@ void ScriptEditor::draw(entt::registry& registry,Scene& p_Scene) {
 			std::string path = "scripts/" + filename + ".lua";
 			if (scriptManager->loadScriptFile(path, filename)) {
 				currentScript = filename;
-				loadCurrentScript();
+				loadCurrentScript(); // Make sure this fills editableBuffer with currentScript's code
+				editorBuffer = std::string(editableBuffer.begin(), editableBuffer.end());
+				editing.SetText(editorBuffer);
 				p_Scene.registerLua(scriptManager->lua);
 				spdlog::info("Loaded script '{}'", filename);
 			}

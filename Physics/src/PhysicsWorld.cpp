@@ -20,6 +20,8 @@ PhysicsWorld::~PhysicsWorld()
 
 void PhysicsWorld::stepSimulation(float fixedDeltaTime)
 {
+    if(m_Scene->m_SceneState == State::Paused || m_Scene->m_SceneState ==State::Edit)
+		return;
 	entt::registry& reg = m_Scene->GetRegistry();
 	reg.view<RigidBody, Transform>().each([&](entt::entity entity, RigidBody& body, Transform& transform) {
 

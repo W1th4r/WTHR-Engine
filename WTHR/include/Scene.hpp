@@ -17,9 +17,11 @@ enum class CameraType {
 	Editor,
 	FreeCam
 };
+enum class State { Edit, Playing, Paused };
 
 class Scene {
 public:
+	inline static State m_SceneState = State::Edit;
 	Scene()
 	{
 		spdlog::set_level(spdlog::level::debug);
@@ -77,9 +79,18 @@ public:
 	void setCameraType(CameraType type) { m_CameraType = type; }
 	std::unordered_map<std::string, Texture>& GetTextures() { return m_Textures; }; // path or name → texture data
 
+
 	void registerLua(sol::state& lua) {
-		lua.set_function("CreateBullet", [this]() {
-			CreateBullet();
+		lua.set_function("CreateBullet", [this](glm::vec3 pos, glm::vec3 dir) {
+			CreateBullet(pos, dir);
+			});
+
+		lua.set_function("getPlayerFacing", [this](entt::entity entity) -> glm::vec3 {
+			if (this->GetRegistry().any_of<Camera>(entity)) {
+				auto& transform = GetRegistry().get<Camera>(entity);
+				return transform.Front;
+			}
+			return glm::vec3(0.0f, 0.0f, 1.0f);
 			});
 	}
 
@@ -138,11 +149,11 @@ public:
 		auto& mesh = m_Registry.emplace<MeshComponent>(entity, std::make_shared<Shapes::Sphere>(0.5f, 36, 18));
 		return entity;
 	}
-	entt::entity CreateBullet() {
+	entt::entity CreateBullet(glm::vec3 positon, glm::vec3 dir) {
 		auto entity = m_Registry.create();
 		m_Registry.emplace<Transform>(entity, GetCamera().Position);
 		m_Registry.emplace<Color>(entity, glm::vec4(1.f));
-		m_Registry.emplace<Bullet>(entity, GetCamera().Position, GetCamera().Front, 0.1f, true);
+		m_Registry.emplace<Bullet>(entity, positon, dir, 0.1f, true);
 		m_Registry.emplace<MeshComponent>(entity, std::make_shared<Shapes::Sphere>(0.1f, 36, 18));
 		return entity;
 	}

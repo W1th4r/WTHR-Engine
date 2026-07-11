@@ -5,6 +5,7 @@
 #include "WindowManager.hpp"
 #include "Application.hpp"
 #include <chrono>
+#include <glm/gtc/type_ptr.hpp>
 
 std::filesystem::path FileDialog::OpenFile()
 {
@@ -247,8 +248,8 @@ static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 		if (registry.any_of<RigidBody>(e))
 		{
 			ImGui::Text("RigidBody");
-			ImGui::DragFloat3("Position##rigidbody", &registry.get<RigidBody>(e).position.x, 0.01f, 0.0f, 1.0f);
-			ImGui::DragFloat3("Velocity", &registry.get<RigidBody>(e).velocity.x, 0.01f, 0.0f, 1.0f);
+			ImGui::DragFloat3("Position##rigidbody", &registry.get<RigidBody>(e).position.x, 0.01f);
+			ImGui::DragFloat3("Velocity", &registry.get<RigidBody>(e).velocity.x, 0.01f);
 			ImGui::Checkbox("IsKinematic", &registry.get<RigidBody>(e).isKinematic);
 			ImGui::Checkbox("useGravity", &registry.get<RigidBody>(e).useGravity);
 
@@ -310,6 +311,7 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager
 	m_Scripts.set(&m_ActiveScene->m_Script);
 }
 static entt::entity ent;
+static entt::entity clipboard;
 void AppUI::Update()
 {
 
@@ -372,19 +374,29 @@ void AppUI::Update()
 
 	if (m_ActiveScene->GetCameraType() == CameraType::Editor)
 	{
+		static bool s_isDragging = false;
+		bool isLeftMouseDown = m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1);
 
-		if (m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		if (isLeftMouseDown)
 		{
-			double x, y;
-			glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
-			m_Renderer->RenderPicking(*m_ActiveScene, x, y);
+			if (!s_isDragging)
+			{
+				s_isDragging = true;
+				double x, y;
+				glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
+				m_Renderer->HandlePickingClick(*m_ActiveScene, x, y, ent);
+
+			}
+			else
+			{
+				double x, y;
+				glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
+				m_Renderer->RenderPicking(*m_ActiveScene, x, y);
+			}
 		}
-
-		if (m_Input->IsMouseButtonPressed(GLFW_MOUSE_BUTTON_1))
+		else
 		{
-			double x, y;
-			glfwGetCursorPos(m_WindowManager->GetWindow(), &x, &y);
-			m_Renderer->HandlePickingClick(*m_ActiveScene, x, y, ent);
+			s_isDragging = false;
 		}
 	}
 	else if (m_ActiveScene->GetCameraType() == CameraType::Player)
@@ -395,6 +407,14 @@ void AppUI::Update()
 		//	m_ActiveScene->CreateBullet();
 		}
 	}
+
+
+	auto cameras = registry.view<Camera, Transform>();
+	cameras.each([&](auto entity, Camera& camera, Transform& transform) {
+		camera.Position = transform.position;
+		});
+
+
 	static bool firstMouse = false;
 	static double lastX;
 	static double lastY;
@@ -518,7 +538,32 @@ void AppUI::Update()
 
 			ImGui::EndMenu();
 		}
+		if (ImGui::BeginMenu("Manipulate"))
+		{
+			if (ImGui::MenuItem("Duplicate Entity")) {
 
+				entt::entity copy = registry.create();
+				for (auto&& [id, storage] : registry.storage()) {
+					// 3. If the source entity has this component, copy it to the new entity
+					if (storage.contains(ent)) {
+						storage.push(copy, storage.value(ent));
+					}
+				}
+				auto& trans = registry.get<Transform>(copy);
+				trans.position += glm::vec3(0.0f, 1.0f, 0.0f); // Offset the copied entity's position
+			}
+
+			if (ImGui::BeginMenu("Copy"))
+			{
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Paste"))
+			{
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenu();
+
+		}
 		ImGui::EndPopup();
 	}
 
@@ -576,6 +621,28 @@ void AppUI::RenderEcs()
 	auto& registry = m_ActiveScene->GetRegistry();
 	std::filesystem::path path = std::filesystem::current_path().concat("\\Default.sce");
 
+	ImGui::Begin("Environment Settings");
+	{
+		ImGui::TextDisabled("Global Lighting (The Sun)");
+
+		// Control direction vector via drag sliders
+		static float dir[3] = { -0.2f, -1.0f, -0.3f };
+		if (ImGui::DragFloat3("Sun Direction", dir, 0.01f, -1.0f, 1.0f)) {
+			m_Renderer->SetSunDirection(glm::vec3(dir[0], dir[1], dir[2]));
+		}
+
+		// Color Pickers for Light Properties
+		static glm::vec3 ambient = m_Renderer->GetSunAmbient();
+		if (ImGui::ColorEdit3("Ambient Intensity", &ambient.r)) {
+			m_Renderer->SetSunAmbient(ambient);
+		}
+
+		static glm::vec3 diffuse = m_Renderer->GetSunDiffuse();
+		if (ImGui::ColorEdit3("Sun Color (Diffuse)", &diffuse.r)) {
+			m_Renderer->SetSunDiffuse(diffuse);
+		}
+	}
+	ImGui::End();
 	ImGui::Begin("ECS");
 	if (ImGui::Button("Save"))
 	{
@@ -1078,17 +1145,54 @@ void AppUI::RenderObjectInspector()
 	ImGui::BeginGroup();
 	ImGui::Text("Entity %d", (uint32_t)m_SelectedEntity);
 
+	auto GetDeterministicColor = [](std::string_view text, float alpha = 0.6f) {
+		uint32_t hash = 2166136261u;
+		for (char c : text) {
+			hash ^= static_cast<uint32_t>(c);
+			hash *= 16777619u;
+		}
+		float r = static_cast<float>((hash & 0xFF0000) >> 16) / 255.0f;
+		float g = static_cast<float>((hash & 0x00FF00) >> 8) / 255.0f;
+		float b = static_cast<float>(hash & 0x0000FF) / 255.0f;
+		return ImVec4(r, g, b, alpha);
+		};
+
+
 	// Tag/Badge for entity type
 	if (registry.any_of<Camera>(m_SelectedEntity)) {
 		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 0.6f));
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("Camera"));
 		ImGui::SmallButton("Camera");
 		ImGui::PopStyleColor();
 	}
 	if (registry.any_of<RigidBody>(m_SelectedEntity)) {
 		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.6f));
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("RigidBody"));
 		ImGui::SmallButton("Physics");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<Material>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("Material"));
+		ImGui::SmallButton("Material");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<PointLight>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("PointLight"));
+		ImGui::SmallButton("PointLight");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<Color>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("Color"));
+		ImGui::SmallButton("Color");
+		ImGui::PopStyleColor();
+	}
+	if (registry.any_of<Texture>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("Texture"));
+		ImGui::SmallButton("Texture");
 		ImGui::PopStyleColor();
 	}
 
@@ -1247,7 +1351,7 @@ void AppUI::RenderObjectInspector()
 			auto& textures = m_ActiveScene->GetTextures();
 
 			// Material preview card
-			ImGui::BeginChild("MaterialPreview", ImVec2(0, 120), true, ImGuiWindowFlags_NoScrollbar);
+			ImGui::BeginChild("MaterialPreview", ImVec2(0, 150), true, ImGuiWindowFlags_NoScrollbar);
 
 			// Left side - texture preview
 			ImGui::BeginGroup();
@@ -1284,7 +1388,7 @@ void AppUI::RenderObjectInspector()
 				if (!meshComp.mesh->mesh.textures.empty()) {
 					auto& tex = meshComp.mesh->mesh.textures[0];
 					// Draw texture here if you have the ID
-					// drawList->AddImage((void*)(intptr_t)tex.id, previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y));
+					drawList->AddImage((void*)(intptr_t)tex.id, previewPos, ImVec2(previewPos.x + previewSize.x, previewPos.y + previewSize.y));
 				}
 			}
 
@@ -1296,12 +1400,33 @@ void AppUI::RenderObjectInspector()
 			ImGui::Spacing();
 
 			// Texture dropdown with preview
-			static std::string currentTexture = "None";
+			std::string currentTexture = "None"; // try to see if entt first has a texture
+			if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+				auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+				auto& applied = meshComp.mesh->mesh.textures;
+				if (applied.size() != 0) {
+					for (auto& [path, tex] : textures)
+					{
+						if (tex.id == applied[applied.size() - 1].id) {
+							currentTexture = std::filesystem::path(path).filename().string();
+						}
+					}
+				}
+			}
+
 			if (ImGui::BeginCombo("##TextureSelect", currentTexture.c_str(), ImGuiComboFlags_HeightLarge))
 			{
 				if (ImGui::Selectable("None", currentTexture == "None")) {
 					currentTexture = "None";
 					// Clear textures
+					if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
+						auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
+						meshComp.mesh->mesh.textures.clear();
+						if (registry.any_of<Texture>(m_SelectedEntity))
+						{
+							registry.remove<Texture>(m_SelectedEntity);
+						}
+					}
 				}
 
 				ImGui::Separator();
@@ -1317,6 +1442,10 @@ void AppUI::RenderObjectInspector()
 						if (registry.any_of<MeshComponent>(m_SelectedEntity)) {
 							auto& meshComp = registry.get<MeshComponent>(m_SelectedEntity);
 							meshComp.mesh->mesh.textures.push_back(tex);
+							if (!registry.any_of<Texture>(m_SelectedEntity))
+							{
+								registry.emplace<Texture>(m_SelectedEntity);
+							}
 						}
 					}
 					if (isSelected) ImGui::SetItemDefaultFocus();
@@ -1326,17 +1455,24 @@ void AppUI::RenderObjectInspector()
 
 			ImGui::Spacing();
 
-			// Material properties
-			static float metallic = 0.5f;
-			static float roughness = 0.5f;
-			static float ao = 1.0f;
+			if (registry.any_of<Material>(m_SelectedEntity)) {
+				Material& material = registry.get<Material>(m_SelectedEntity);
 
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f, "%.2f");
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f, "%.2f");
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f, "%.2f");
+				uint32_t minValue = 0;
+				uint32_t maxValue = 100;
+				uint32_t diffuse_id = 0;
+				if (registry.any_of<Texture>(m_SelectedEntity)) {
+					auto& enttt = registry.get<MeshComponent>(m_SelectedEntity);
+					diffuse_id = enttt.mesh->mesh.textures[0].id;
+				}
+				ImGui::SetNextItemWidth(150);
+				ImGui::Text("Diffuse id is %d", static_cast<int>(diffuse_id));
+
+				ImGui::SetNextItemWidth(150);
+				ImGui::SliderScalar("Shininess", ImGuiDataType_U32, &material.shininess, &minValue, &maxValue);
+				ImGui::SetNextItemWidth(150);
+				ImGui::SliderScalar("Specular", ImGuiDataType_U32, &material.specular, &minValue, &maxValue);
+			}
 
 			ImGui::EndGroup();
 			ImGui::EndGroup();
@@ -1476,7 +1612,51 @@ void AppUI::RenderObjectInspector()
 			ImGui::Spacing();
 		}
 	}
+	if (registry.any_of<PointLight>(m_SelectedEntity))
+	{
+		bool lightOpen = ImGui::CollapsingHeader("󰛨 Point Light", ImGuiTreeNodeFlags_DefaultOpen);
 
+		// Context Menu / Delete Button logic...
+		// (Keep your same context menu button layout here)
+
+		if (lightOpen)
+		{
+			ImGui::Indent(8);
+			auto& light = registry.get<PointLight>(m_SelectedEntity);
+
+			// 1. Color (Single color picker is way cleaner for point lights than separate ambient/diffuse/specular)
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Color");
+			ImGui::SameLine(90);
+			ImGui::ColorEdit3("##ptColor", glm::value_ptr(light.color), ImGuiColorEditFlags_NoInputs);
+
+			// 2. Intensity
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Intensity");
+			ImGui::SameLine(90);
+			ImGui::SetNextItemWidth(150);
+			ImGui::DragFloat("##ptIntensity", &light.intensity, 0.1f, 0.0f, 100.0f, "%.1f");
+
+			ImGui::SeparatorText("Attenuation Falloff");
+
+			// 3. Linear Falloff
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Linear");
+			ImGui::SameLine(90);
+			ImGui::SetNextItemWidth(150);
+			ImGui::DragFloat("##ptLinear", &light.linear, 0.001f, 0.0f, 1.0f, "%.4f");
+
+			// 4. Quadratic Falloff
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Quadratic");
+			ImGui::SameLine(90);
+			ImGui::SetNextItemWidth(150);
+			ImGui::DragFloat("##ptQuadratic", &light.quadratic, 0.0001f, 0.0f, 1.0f, "%.5f");
+
+			ImGui::Unindent(8);
+			ImGui::Spacing();
+		}
+	}
 	ImGui::EndChild();
 
 	// --- 5. ADD COMPONENT BUTTON (MODERN FLOATING STYLE) ---
@@ -1506,9 +1686,19 @@ void AppUI::RenderObjectInspector()
 
 		// Component categories
 		if (ImGui::BeginMenu("Rendering")) {
-			if (ImGui::MenuItem("Mesh Renderer")) {}
+			if (ImGui::MenuItem("Material"))
+			{
+				if (!registry.any_of<Material>(m_SelectedEntity)) {
+					registry.emplace<Material>(m_SelectedEntity);
+				}
+			}
 			if (ImGui::MenuItem("Model")) {}
-			if (ImGui::MenuItem("Light")) {}
+			if (ImGui::MenuItem("PointLight"))
+			{
+				if (!registry.any_of<PointLight>(m_SelectedEntity)) {
+					registry.emplace<PointLight>(m_SelectedEntity);
+				}
+			}
 			ImGui::EndMenu();
 		}
 
