@@ -37,11 +37,13 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wno-error=deprecated-declarations)
       add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>)
     add_link_options(-stdlib=libc++)
+    add_compile_definitions(SOL_EXCEPTIONS_SAFE_PROPAGATION=1) 
+    add_compile_definitions(LUA_VERSION_NUM=504)
 endif()
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
 endif()
-
+set(ASSIMP_BUILD_MINIZIP ON CACHE INTERNAL "Build Assimp with bundled minizip")
 # Vendor libraries
 add_subdirectory(vendor/glfw)
 add_subdirectory(vendor/glm)
@@ -50,6 +52,8 @@ add_subdirectory(vendor/entt)
 add_subdirectory(vendor/json)
 add_subdirectory(vendor/assimp)
 add_subdirectory(vendor/Catch2)
+# Add this before you compile sol2 or targets depending on it
+include_directories(SYSTEM /usr/include/lua5.4)
 add_subdirectory(vendor/sol2)
 
 # Glad
@@ -74,7 +78,12 @@ target_link_libraries(imgui PUBLIC glfw)
 add_library(ImGuizmo vendor/ImGuizmo/ImGuizmo.cpp)
 target_include_directories(ImGuizmo PUBLIC vendor/ImGuizmo vendor/imgui)
 target_link_libraries(ImGuizmo PUBLIC imgui glm)
+# Find Minizip on Arch/CachyOS
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MINIZIP REQUIRED minizip)
 
+# Force the specific minizip subdirectory into the include paths
+include_directories(/usr/include/minizip)
 
 # Add WTHR app
 add_subdirectory(WTHR)

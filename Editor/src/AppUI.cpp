@@ -1639,7 +1639,7 @@ void AppUI::RenderObjectInspector()
 			ImGui::AlignTextToFramePadding();
 			ImGui::Text("Color");
 			ImGui::SameLine(90);
-			ImGui::ColorEdit3("##ptColor", glm::value_ptr(light.color), ImGuiColorEditFlags_NoInputs);
+		//	ImGui::ColorEdit3("##ptColor", glm::value_ptr(light.color), ImGuiColorEditFlags_NoInputs);
 
 			// 2. Intensity
 			ImGui::AlignTextToFramePadding();
