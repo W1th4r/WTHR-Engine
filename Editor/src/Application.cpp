@@ -5,8 +5,7 @@
 #include <Components.hpp>
 #include <Scene.hpp>
 
-
-Application::Application()
+Application::Application() : m_UI(m_NetworkManager)
 {
 
 }
@@ -83,8 +82,7 @@ bool Application::Init()
 	GLFWwindow* contextA = m_WindowManager.GetWindow();
 
 	m_ActiveScene.SetWorker(m_WindowManager.GetWindow());
-	m_UI.Initialize(m_ActiveScene, m_Renderer, m_WindowManager);
-
+	m_UI.Initialize(m_ActiveScene, m_Renderer, m_WindowManager, m_NetworkManager);
 	return true;
 }
 
@@ -153,6 +151,38 @@ void Application::Run()
 
 		io.DeltaTime = deltaTime;
 		m_ActiveScene.m_Script.update(1);
+
+		// 1. Check if the manager vector even has elements
+		if (!m_NetworkManager.empty()) {
+
+			// 2. Safely attempt the cast and store it
+			auto* server = dynamic_cast<NetworkServer*>(m_NetworkManager[0].get());
+
+			if (server) {
+				ConnectionID clientID;
+				uint32_t typeID;
+				std::string payload;
+
+				// 3. Optional: Uncomment this to prove this block is running every frame!
+				// spdlog::info("[Application] Server is valid, attempting to poll... Queue size: {}", server->m_incomingQueue.Empty() ? "Empty" : "Has Data");
+
+				while (server->ReceiveFrom(clientID, typeID, payload)) {
+					if (typeID == 0) {
+						spdlog::error("[Application] NEW CONNECTION EVENT: Client ID {}", clientID);
+					}
+					else {
+						spdlog::error("[Application] Received packet from Client {}: TypeID {}, Payload Size {}", clientID, typeID, payload.size());
+					}
+				}
+			}
+			else {
+				// WARNING: The cast failed! The object at index 0 is a NetworkClient or something else.
+				spdlog::error("[Application] ERROR: m_NetworkManager[0] is NOT a NetworkServer!");
+			}
+		}
+		else {
+			// If you are spamming a log here, your server hasn't been added to the vector yet!
+		}
 
 		m_World.stepSimulation(.016f);
 

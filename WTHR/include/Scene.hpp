@@ -11,6 +11,7 @@
 #include "Camera.hpp"
 #include <entt/entity/storage.hpp>
 #include <entt/entity/registry.hpp>
+#include <asio.hpp>
 
 enum class CameraType {
 	Player,
@@ -120,8 +121,6 @@ public:
 		camera.GetViewMatrix();
 		camera.Front = glm::vec3(0.f);
 		camera.Position = glm::vec3(0.f);
-
-
 
 		return entity;
 	}

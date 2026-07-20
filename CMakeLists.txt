@@ -30,6 +30,29 @@ if(MSVC)
   set(CMAKE_CXX_COMPILER_LAUNCHER "")
 endif()
 
+#asio{
+find_package(Threads REQUIRED)
+
+# 2. Define the Asio interface target directly from the top level
+add_library(vendor_asio INTERFACE)
+
+# 3. Point to the vendor folder path (adjust the 'asio/asio/include' path if needed)
+target_include_directories(vendor_asio INTERFACE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/asio/include
+)
+
+# 4. Attach the required thread library and standalone flag
+target_link_libraries(vendor_asio INTERFACE Threads::Threads)
+target_compile_definitions(vendor_asio INTERFACE 
+    ASIO_STANDALONE
+    WIN32_LEAN_AND_MEAN    # Prevents windows.h from including old WinSock.h
+    _WIN32_WINNT=0x0A00    # Explicitly targets Windows 10/11 (Asio requires this)
+)
+
+# Now, add your core subdirectory
+#asio}
+
+
 # Vendor libraries
 add_subdirectory(vendor/glfw)
 add_subdirectory(vendor/glm)
@@ -39,6 +62,7 @@ add_subdirectory(vendor/json)
 add_subdirectory(vendor/assimp)
 add_subdirectory(vendor/Catch2)
 add_subdirectory(vendor/sol2)
+add_subdirectory(vendor/miniaudio)
 
 # Glad
 add_library(glad STATIC vendor/glad/src/src/glad.c)

@@ -86,6 +86,8 @@ target_link_libraries(WTHR
         Lua
         sol2
         EnTT
+        vendor_asio
+        miniaudio
 )
 
 # --------------------------

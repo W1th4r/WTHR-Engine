@@ -190,3 +190,8 @@ struct PointLight {
 	float linear = 0.09f;  // Controls fade over medium distance
 	float quadratic = 0.032f; // Controls fade over long distance
 };
+struct NetworkComponent {
+	uint32_t ipAddress;
+	uint16_t port;
+	bool isServer;
+};

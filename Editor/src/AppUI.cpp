@@ -6,6 +6,8 @@
 #include "Application.hpp"
 #include <chrono>
 #include <glm/gtc/type_ptr.hpp>
+#include <NetworkServer.hpp>
+#include <NetworkClient.hpp>
 
 std::filesystem::path FileDialog::OpenFile()
 {
@@ -300,8 +302,9 @@ static void DrawEntity(entt::registry& registry, entt::entity e, Scene& scene)
 }
 
 
-void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager& p_WindowManagar)
+void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager& p_WindowManagar, std::vector<std::unique_ptr<NetworkManager>>& p_NetworkManager)
 {
+	m_NetworkManager = std::move(p_NetworkManager);
 	m_ActiveScene = &p_ActiveScene;
 	m_Renderer = &p_Renderer;
 
@@ -614,6 +617,8 @@ void AppUI::Render()
 	this->RenderInspectors();
 	this->RenderScripts();
 	this->RenderObjectInspector();
+	this->DrawNetworkServerPanel();
+	this->DrawNetworkClientsPanel();
 }
 
 void AppUI::RenderEcs()
@@ -1820,4 +1825,239 @@ void AppUI::DrawMenuBar()
 
 		ImGui::EndMainMenuBar();
 	}
+}
+void AppUI::DrawNetworkServerPanel()
+{
+	NetworkServer* networkManager = nullptr;
+	if (!m_NetworkManager.empty() && m_NetworkManager[0])
+	{
+		networkManager = static_cast<NetworkServer*>(m_NetworkManager[0].get());
+	}
+	ImGui::Begin("Network Server Control Panel");
+
+	// --- SECTION 1: SERVER CONFIGURATION & LIFE CYCLE ---
+	static int port = 7777;
+	static char hostAddress[64] = "127.0.0.1"; // Blank defaults to "0.0.0.0" (all interfaces)
+
+	if (networkManager && networkManager->IsRunning()) // Assuming you add an IsRunning() bool to your manager
+	{
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "SERVER STATUS: ONLINE");
+		ImGui::SameLine();
+		if (ImGui::Button("Shutdown Server", ImVec2(-1, 0)))
+		{
+			networkManager->Stop();
+		}
+	}
+	else
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "SERVER STATUS: OFFLINE");
+
+		ImGui::InputText("Host IP", hostAddress, IM_ARRAYSIZE(hostAddress));
+		ImGui::InputInt("Port", &port);
+
+		if (ImGui::Button("Launch Server", ImVec2(-1, 0)))
+		{
+			// Allocate the server if the unique_ptr is currently null
+			if (!networkManager)
+			{
+				m_NetworkManager.resize(1);
+				m_NetworkManager[0] = std::make_unique<NetworkServer>();
+				networkManager = static_cast<NetworkServer*>(m_NetworkManager[0].get());
+			}
+
+			networkManager->Start(hostAddress, port);
+		}
+	}
+
+	ImGui::Separator();
+
+	// Early out if server isn't running to keep the layout clean
+	if (!networkManager || !networkManager->IsRunning())
+	{
+		ImGui::TextDisabled("Launch the server to view stats and active connections.");
+		ImGui::End();
+		return;
+	}
+
+	// --- SECTION 2: LIVE BROADCAST ---
+	ImGui::Text("Global Broadcast");
+	static char broadcastBuffer[256] = "";
+	ImGui::InputText("##msg", broadcastBuffer, IM_ARRAYSIZE(broadcastBuffer));
+	ImGui::SameLine();
+	if (ImGui::Button("Broadcast"))
+	{
+		if (std::strlen(broadcastBuffer) > 0)
+		{
+			uint32_t typeID = 999; // Custom text/chat TypeID
+			networkManager->Broadcast(typeID, broadcastBuffer);
+			std::memset(broadcastBuffer, 0, IM_ARRAYSIZE(broadcastBuffer)); // Clear buffer
+		}
+	}
+
+	ImGui::Separator();
+
+	// --- SECTION 3: CONNECTED CLIENTS TABLE ---
+	ImGui::Text("Connected Clients");
+
+	// Note: To display individual clients cleanly, you may want to expose a way 
+	// to get a list of active IDs from your NetworkServer (e.g., server->GetActiveClientIDs())
+	if (ImGui::BeginTable("ClientsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+	{
+		ImGui::TableSetupColumn("Connection ID", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+		ImGui::TableHeadersRow();
+
+		// Hardcoded example row loops (replace with your server loop using actual IDs)
+		for (ConnectionID id : networkManager->GetActiveClientIDs()) {
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("ID: %llu", id);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Connected & Syncing");
+
+			ImGui::TableSetColumnIndex(2);
+
+			// Using ### creates a unique ID string while only displaying "Kick Client"
+			// Format string creates: "Kick Client###KickClientID_1"
+			ImGui::PushID(static_cast<int>(id));
+			if (ImGui::Button(std::format("Kick Client###KickClientID_{}", id).c_str()))
+			{
+				networkManager->DisconnectClient(id);
+			}
+			ImGui::PopID();
+		}
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
+}
+void AppUI::DrawNetworkClientsPanel()
+{
+	ImGui::Begin("Network Clients Control Panel");
+
+	// --- CONFIGURATION DEFAULTS ---
+	static int targetPort = 7777;
+	static char targetHost[64] = "127.0.0.1";
+
+	ImGui::Text("Global Target Settings:");
+	ImGui::InputText("Target Host IP", targetHost, IM_ARRAYSIZE(targetHost));
+	ImGui::InputInt("Target Port", &targetPort);
+
+	if (ImGui::Button("Add New Client Slot", ImVec2(-1, 0)))
+	{
+		m_NetworkManager.push_back(nullptr);
+	}
+
+	ImGui::Separator();
+
+	if (m_NetworkManager.size() <= 1)
+	{
+		ImGui::TextDisabled("No clients available. Click 'Add New Client Slot' above.");
+		ImGui::End();
+		return;
+	}
+
+	// --- PERSISTENT STATE PER CLIENT SLOT ---
+	struct ClientUIState {
+		char messageBuffer[256] = "";
+		int customTypeID = 1;
+	};
+	// This map will keep unique state per loop index across frame updates
+	static std::unordered_map<size_t, ClientUIState> s_ClientUiStates;
+
+	for (size_t i = 1; i < m_NetworkManager.size(); ++i)
+	{
+		auto& clientManager = m_NetworkManager[i];
+
+		ImGui::PushID(static_cast<int>(i));
+
+		char clientLabel[32];
+		std::snprintf(clientLabel, sizeof(clientLabel), "Client #%zu Slots", i);
+
+		if (ImGui::CollapsingHeader(clientLabel, ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			NetworkClient* client = clientManager ? static_cast<NetworkClient*>(clientManager.get()) : nullptr;
+			bool isConnected = client && client->IsConnected();
+
+			if (isConnected)
+			{
+				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "STATUS: CONNECTED");
+				ImGui::SameLine();
+				if (ImGui::Button("Disconnect"))
+				{
+					client->Stop();
+				}
+			}
+			else
+			{
+				ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "STATUS: DISCONNECTED");
+				ImGui::SameLine();
+				if (ImGui::Button("Connect to Server"))
+				{
+					if (!clientManager)
+					{
+						clientManager = std::make_unique<NetworkClient>();
+						client = static_cast<NetworkClient*>(clientManager.get());
+					}
+					client->Start(targetHost, targetPort);
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Remove Slot"))
+			{
+				if (clientManager)
+				{
+					clientManager->Stop();
+				}
+				clientManager.reset();
+				s_ClientUiStates.erase(i); // Wipe state out of our UI storage
+			}
+
+			// --- DATA TRANSMISSION SECTION ---
+			if (isConnected)
+			{
+				ImGui::Indent();
+
+				// Fetch or create the unique state block for this specific loop index
+				ClientUIState& uiState = s_ClientUiStates[i];
+
+				ImGui::SetNextItemWidth(120.0f);
+				ImGui::InputInt("TypeID", &uiState.customTypeID);
+				ImGui::SameLine();
+
+				ImGui::SetNextItemWidth(250.0f);
+				std::string inputTag = "##msg" + std::to_string(i);
+				ImGui::InputText(inputTag.c_str(), uiState.messageBuffer, IM_ARRAYSIZE(uiState.messageBuffer));
+
+				ImGui::SameLine();
+				if (ImGui::Button("Send Packet"))
+				{
+					size_t msgLen = std::strlen(uiState.messageBuffer);
+					if (msgLen > 0)
+					{
+						// Using your clean refactored string_view API variant!
+						client->Send(
+							static_cast<uint32_t>(uiState.customTypeID),
+							std::string_view(uiState.messageBuffer, msgLen)
+						);
+
+						// Clear only this client's field buffer text cleanly
+						std::memset(uiState.messageBuffer, 0, IM_ARRAYSIZE(uiState.messageBuffer));
+					}
+				}
+
+				ImGui::Unindent();
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::PopID();
+	}
+
+	ImGui::End();
 }

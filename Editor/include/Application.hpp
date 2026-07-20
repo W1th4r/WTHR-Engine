@@ -7,6 +7,8 @@
 #include <PhysicsWorld.hpp>
 #include <AppUI.hpp>
 #include <AssetCompiler.hpp>
+#include <NetworkServer.hpp>
+#include <NetworkClient.hpp>
 
 class Application
 {
@@ -35,4 +37,5 @@ protected:
 	AppUI m_UI;
 	Scene m_ActiveScene;
 	AssetCompiler m_Compiler;
+	std::vector<std::unique_ptr<NetworkManager>> m_NetworkManager;
 };
