@@ -25,6 +25,7 @@ class InputManager;
 class WindowManager;
 class ScriptEditor;
 class NetworkManager;
+class AudioManager;
 
 class FileDialog
 {
@@ -53,11 +54,14 @@ private:
 	void DrawMenuBar();
 	void DrawNetworkServerPanel();
 	void DrawNetworkClientsPanel();
+	void DrawAudioComponentInspector(AudioComponent& audio);
 	Scene* m_ActiveScene;
 	Renderer* m_Renderer;
 	InputManager* m_Input; 
 	WindowManager* m_WindowManager;
 	Editor m_Editor;
 	ScriptEditor m_Scripts;
+	AudioManager* m_AudioManger;
+
 	std::vector<std::unique_ptr<NetworkManager>>& m_NetworkManager;
 };

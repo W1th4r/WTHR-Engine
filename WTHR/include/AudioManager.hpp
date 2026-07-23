@@ -1,15 +1,32 @@
-#include <miniaudio.h>
+#pragma once
 
-// AudioManager.h
+#include <entt/entity/registry.hpp>
+#include <memory>
+#include <string>
+
 class AudioManager {
 public:
-    void Initialize();
+    AudioManager();
+    ~AudioManager(); // MUST be declared here, defined in .cpp!
+
+    void LoadSound(const std::string& path);
+
+    // Prevent accidental copying (unique_ptr is non-copyable)
+    AudioManager(const AudioManager&) = delete;
+    AudioManager& operator=(const AudioManager&) = delete;
+
+    // Allow moving if needed
+    AudioManager(AudioManager&&) noexcept = default;
+    AudioManager& operator=(AudioManager&&) noexcept = default;
+
+    void Initialize() {}
     void PlaySound(const std::string& path);
     void Update(entt::registry& registry);
 
 private:
-    // Keep miniaudio completely out of the header file!
-    // This forward declaration keeps your build times fast.
     struct AudioEngineImpl;
-    std::unique_ptr<AudioEngineImpl> m_engine;
+    struct SoundWrapper;
+    std::unique_ptr<AudioEngineImpl> m_Engine;
+    std::unordered_map<uint32_t, SoundWrapper> m_Sounds;
+    
 };

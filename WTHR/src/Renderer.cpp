@@ -54,6 +54,8 @@ void Renderer::Init()
 
 void Renderer::Clear(const glm::vec3& color)
 {
+	uint32_t clearValue = 0xFFFFFFFF; // uint -1
+	glClearBufferuiv(GL_COLOR, 1, &clearValue);
 	glClearColor(color.r, color.g, color.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
@@ -62,7 +64,7 @@ void Renderer::RenderScene(Scene& scene, Shader& shader)
 	auto& registry = scene.GetRegistry();
 	Camera& camera = scene.GetCamera();
 
-	// Recalculate projection dynamically to handle window resizing safely
+	//TODO fails if window minimized
 	glm::mat4 projection = glm::perspective(
 		glm::radians(45.f),
 		static_cast<float>(width) / static_cast<float>(height),
@@ -247,11 +249,14 @@ void Renderer::RenderPicking(Scene& scene, int x, int y)
 	// --- Bind and clear picking framebuffer ---
 	m_ObjectPicking.Bind();
 	glViewport(0, 0, width, height);
-	glClearColor(0, 0, 0, 1);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	int clearValue = -1;
-	glClearBufferiv(GL_COLOR, 0, &clearValue);
 
+	// 1. MUST use glClearBufferuiv (with a 'u') for GL_RGB32UI / GL_R32UI textures!
+	//    0xFFFFFFFF is equivalent to (uint32_t)-1
+	uint32_t clearValue[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+	glClearBufferuiv(GL_COLOR, 0, clearValue);
+
+	// 2. Clear ONLY depth
+	glClear(GL_DEPTH_BUFFER_BIT);
 	pickingShader.use();
 
 	float nearPlane = 0.1f;

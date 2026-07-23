@@ -64,14 +64,24 @@ public:
         }
     };
 
-    PixelInfo ReadPixel(GLuint x, GLuint y)
+    PixelInfo ReadPixel(uint32_t x, uint32_t y)
     {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, FBO);
-        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        // 🛑 Bounds Check: If pixel is outside framebuffer dimensions, return fallback
+        if (x >= width || y >= height)
+        {
+            PixelInfo fallbackPixel;
+            fallbackPixel.ObjectID = 0xFFFFFFFF; // Match default clear ID / no-entity ID
+            return fallbackPixel;
+        }
+
+        // Bind buffer and perform actual GL readback
+        Bind();
 
         PixelInfo pixel;
-        glReadPixels(x, y, 1, 1, GL_RGB_INTEGER, GL_UNSIGNED_INT, &pixel);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        // Assuming GL_RED_INTEGER / GL_UNSIGNED_INT read format for integer picking
+        glReadPixels(x, y, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &pixel.ObjectID);
+
+        Unbind();
 
         return pixel;
     }

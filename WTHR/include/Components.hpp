@@ -9,14 +9,16 @@
 #include <chrono>
 
 //Color component
-struct Color {
+struct Color 
+{
 	Color() { value = glm::vec4(1.f); }
 	Color(glm::vec4 col) : value(col) {}
 	glm::vec4 value{ 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA, default white
 };
 
 // Transform component
-struct Transform {
+struct Transform 
+{
 	glm::vec3 position{ 0.0f };
 	glm::vec3 rotation{ 0.0f }; // Euler angles in degrees
 	glm::vec3 scale{ 1.0f };
@@ -45,7 +47,8 @@ struct Transform {
 
 
 // Mesh component (wraps a primitive shape)
-struct MeshComponent {
+struct MeshComponent 
+{
 	std::shared_ptr<Shapes::PrimitiveShape> mesh;
 };
 
@@ -78,7 +81,8 @@ public:
 		isLoaded = false;
 	}
 	// Pass the shader in! Don't compile it inside the loop.
-	void GenerateThumbnail() {
+	void GenerateThumbnail() 
+	{
 		Shader thumbShader("shaders/thumb.vert", "shaders/thumb.frag");
 		// 1. Prepare destination
 		m_Thumbnail.CreateEmpty(256, 256);
@@ -141,10 +145,12 @@ private:
 };
 
 
-struct ModelComponent {
+struct ModelComponent 
+{
 	std::shared_ptr<ThreadSafeModel> model;
 };
-struct PlayerController {
+struct PlayerController 
+{
 	glm::vec3 velocity;
 	glm::vec3 halfExtents;
 	bool isGrounded = false;
@@ -173,12 +179,14 @@ struct Bullet {
 	}
 };
 
-struct Material {
+struct Material 
+{
 	uint32_t diffuse;
 	uint32_t specular;
 	float shininess;
 };
-struct PointLight {
+struct PointLight 
+{
 	// Position is handled by your ECS Transform component, 
 	// so we don't duplicate it here!
 
@@ -190,8 +198,29 @@ struct PointLight {
 	float linear = 0.09f;  // Controls fade over medium distance
 	float quadratic = 0.032f; // Controls fade over long distance
 };
-struct NetworkComponent {
+struct NetworkComponent 
+{
 	uint32_t ipAddress;
 	uint16_t port;
 	bool isServer;
+};
+struct AudioComponent {
+	// --- Resource Reference ---
+	std::string assetPath = "";
+
+	// --- Dynamic Controls ---
+	float volume = 1.0f;        
+	float pitch = 1.0f;         
+	bool isLooping = false;     
+	bool isSpatial = true;      
+
+	// --- Playback Commands / State ---
+	bool playRequested = false; 
+	bool stopRequested = false; 
+	bool isPlaying = false;     
+	bool isPaused = false;
+
+	// --- Spatial Settings ---
+	float minDistance = 1.0f;   
+	float maxDistance = 100.0f; 
 };

@@ -8,6 +8,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <NetworkServer.hpp>
 #include <NetworkClient.hpp>
+#include "misc/cpp/imgui_stdlib.h" // Path depending on your include directory
+#include <AudioManager.hpp>
 
 std::filesystem::path FileDialog::OpenFile()
 {
@@ -312,11 +314,15 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager
 
 	m_Editor.SetScene(m_ActiveScene);
 	m_Scripts.set(&m_ActiveScene->m_Script);
+
+	m_AudioManger = new AudioManager();
+	m_AudioManger->Initialize();
 }
 static entt::entity ent;
 static entt::entity clipboard;
 void AppUI::Update()
 {
+	m_AudioManger->Update(m_ActiveScene->GetRegistry());
 
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 
@@ -607,7 +613,9 @@ void AppUI::Update()
 	if (l_isPlaying)
 		ImGui::Text("Scene is playing");
 	else ImGui::Text("Scene is stopped");
+	
 
+	
 }
 
 void AppUI::Render()
@@ -619,6 +627,16 @@ void AppUI::Render()
 	this->RenderObjectInspector();
 	this->DrawNetworkServerPanel();
 	this->DrawNetworkClientsPanel();
+	if ((uint32_t)ent != 0)
+	{
+		entt::registry& reg = m_ActiveScene->GetRegistry();
+		if (m_ActiveScene->HasComponent<AudioComponent>(ent))
+		{
+			AudioComponent& comp = m_ActiveScene->GetComponent<AudioComponent>(ent);
+			DrawAudioComponentInspector(comp);
+
+		}
+	}
 }
 
 void AppUI::RenderEcs()
@@ -1200,6 +1218,12 @@ void AppUI::RenderObjectInspector()
 		ImGui::SmallButton("Texture");
 		ImGui::PopStyleColor();
 	}
+	if (registry.any_of<AudioComponent>(m_SelectedEntity)) {
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, GetDeterministicColor("Audio"));
+		ImGui::SmallButton("Audio");
+		ImGui::PopStyleColor();
+	}
 
 	ImGui::TextDisabled("Entity ID: %d | Active", (uint32_t)m_SelectedEntity);
 	ImGui::EndGroup();
@@ -1704,6 +1728,12 @@ void AppUI::RenderObjectInspector()
 					registry.emplace<PointLight>(m_SelectedEntity);
 				}
 			}
+			if (ImGui::MenuItem("Audio"))
+			{
+				if (!registry.any_of<AudioComponent>(m_SelectedEntity)) {
+					registry.emplace<AudioComponent>(m_SelectedEntity);
+				}
+			}
 			ImGui::EndMenu();
 		}
 
@@ -2059,5 +2089,101 @@ void AppUI::DrawNetworkClientsPanel()
 		ImGui::PopID();
 	}
 
+	ImGui::End();
+}
+
+void AppUI::DrawAudioComponentInspector(AudioComponent& audio) {
+	ImGui::Begin("Audio Component");
+	if (ImGui::CollapsingHeader("Audio", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+		// --- 1. Resource Reference ---
+		ImGui::TextUnformatted("Audio Resource");
+
+		// Input text for std::string path
+		ImGui::InputText("Asset Path", &audio.assetPath);
+
+		// Drag-and-Drop Target (assuming you drag files from an Asset Browser)
+		if (ImGui::BeginDragDropTarget()) {
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+				const char* path = static_cast<const char*>(payload->Data);
+				audio.assetPath = path;
+			}
+			ImGui::EndDragDropTarget();
+		}
+
+		ImGui::Separator();
+
+		// --- 2. Dynamic Controls ---
+		ImGui::TextUnformatted("Playback Controls");
+
+		// Slider for volume with soft bounds [0.0, 1.0], but allows typing higher values
+		ImGui::SliderFloat("Volume", &audio.volume, 0.0f, 1.0f, "%.2f");
+
+		// Pitch control (typical range 0.1x to 3.0x speed)
+		ImGui::SliderFloat("Pitch", &audio.pitch, 0.1f, 3.0f, "%.2f");
+
+		ImGui::Checkbox("Looping", &audio.isLooping);
+		ImGui::SameLine();
+		ImGui::Checkbox("Spatial (3D)", &audio.isSpatial);
+
+		// --- 3. Spatial Settings (Only shown if spatial audio is enabled) ---
+		if (audio.isSpatial) {
+			if (ImGui::TreeNodeEx("3D Attenuation Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+				ImGui::DragFloat("Min Distance", &audio.minDistance, 0.1f, 0.0f, audio.maxDistance, "%.1f m");
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Distance at which volume starts to attenuate.");
+				}
+
+				ImGui::DragFloat("Max Distance", &audio.maxDistance, 0.5f, audio.minDistance, 1000.0f, "%.1f m");
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Distance beyond which sound becomes silent.");
+				}
+
+				// Validation safeguard
+				if (audio.minDistance > audio.maxDistance) {
+					audio.minDistance = audio.maxDistance;
+				}
+
+				ImGui::TreePop();
+			}
+		}
+
+		ImGui::Separator();
+
+		// --- 4. Playback Commands & Live Status ---
+		ImGui::TextUnformatted("Live Status & Preview");
+
+		// Status indicator LED/Text
+		if (audio.isPlaying) {
+			ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "● Playing");
+		}
+		else if (audio.isPaused) {
+			ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "⏸ Paused");
+		}
+		else {
+			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "■ Stopped");
+		}
+
+		// Preview Control Buttons
+		ImGui::BeginDisabled(audio.assetPath.empty()); // Disable buttons if no asset is assigned
+
+		if (ImGui::Button("Play Preview")) {
+			audio.playRequested = true;
+			audio.stopRequested = false;
+		//	m_AudioManger->PlaySound(audio.assetPath);
+
+			
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Stop")) {
+			audio.stopRequested = true;
+			audio.playRequested = false;
+		}
+
+		ImGui::EndDisabled();
+	}
 	ImGui::End();
 }

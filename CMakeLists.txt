@@ -77,6 +77,7 @@ set(IMGUI_SRC
     vendor/imgui/imgui_widgets.cpp
     vendor/imgui/backends/imgui_impl_glfw.cpp
     vendor/imgui/backends/imgui_impl_opengl3.cpp
+    vendor/imgui/misc/cpp/imgui_stdlib.cpp
 )
 add_library(imgui ${IMGUI_SRC})
 target_include_directories(imgui PUBLIC vendor/imgui vendor/imgui/backends)
@@ -92,3 +93,29 @@ add_subdirectory(WTHR)
 add_subdirectory(Physics)
 add_subdirectory(Editor)
 add_subdirectory(Runtime)
+# 2. Add Catch2 tests target
+option(WTHR_BUILD_TESTS "Build WTHR Engine Unit Tests" ON)
+
+if(WTHR_BUILD_TESTS)
+    enable_testing()
+    
+    # Grab test files
+    file(GLOB_RECURSE TEST_SOURCES "Tests/*.cpp")
+    
+    add_executable(WTHR_Tests ${TEST_SOURCES})
+    
+    # Link against Catch2, your core engine library, and glad/glfw for GL context
+    target_link_libraries(WTHR_Tests PRIVATE 
+        Catch2::Catch2 
+        WTHR 
+    )
+    
+    # Enable `ctest` command-line runner
+    add_test(NAME EngineUnitTests COMMAND WTHR_Tests)
+endif()
+target_link_libraries(WTHR_Tests PRIVATE 
+    Catch2::Catch2
+    WTHR # Your core engine library
+    glad
+    glfw
+)
