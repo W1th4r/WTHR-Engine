@@ -8,6 +8,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <NetworkServer.hpp>
 #include <NetworkClient.hpp>
+#include "imgui.h"
+#include "imgui_internal.h"
+#include <filesystem>
 #include "misc/cpp/imgui_stdlib.h" // Path depending on your include directory
 #include <AudioManager.hpp>
 
@@ -320,37 +323,67 @@ void AppUI::Initialize(Scene& p_ActiveScene, Renderer& p_Renderer, WindowManager
 }
 static entt::entity ent;
 static entt::entity clipboard;
+static void InitDockSpace(const char*);
 void AppUI::Update()
 {
+	// 2. Setup Host Window Flags
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking
+		| ImGuiWindowFlags_NoTitleBar
+		| ImGuiWindowFlags_NoCollapse
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoBringToFrontOnFocus
+		| ImGuiWindowFlags_NoNavFocus
+		| ImGuiWindowFlags_NoBackground; // Lets OpenGL show through host window
 	m_AudioManger->Update(m_ActiveScene->GetRegistry());
-
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(viewport->Pos);
 	ImGui::SetNextWindowSize(viewport->Size);
 	ImGui::SetNextWindowViewport(viewport->ID);
 
-	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // transparent background
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
+	// 3. Begin Host Window
+	ImGui::Begin("DockSpace Host", nullptr, window_flags);
+	ImGui::PopStyleVar(3);
 
-
-	// Start full-screen dockspace host window
-	ImGui::Begin("DockSpace Window", nullptr, window_flags);
-	ImGui::PopStyleColor();
-	ImGui::PopStyleVar(2);
-
-	// Create the actual DockSpace
 	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
 
+	// 4. Build Layout IF IT DOES NOT EXIST YET
+	if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr)
+	{
+		ImGui::DockBuilderRemoveNode(dockspace_id); // Clear previous
+		ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
+		ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
 
+		ImGuiID dock_main_id = dockspace_id;
 
+		// Split nodes
+		ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
+		ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
+		ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+
+		// Dock Windows (Ensure names match ImGui::Begin() EXACTLY)
+		ImGui::DockBuilderDockWindow("Environment Settings", dock_id_left);
+		ImGui::DockBuilderDockWindow("ECS", dock_id_left);
+		ImGui::DockBuilderDockWindow("Network Clients Control Panel", dock_id_right);
+		ImGui::DockBuilderDockWindow("Network Server Control Panel", dock_id_bottom);
+
+		// CRITICAL: Leave dock_main_id empty so OpenGL shows through the center!
+
+		ImGui::DockBuilderFinish(dockspace_id);
+	}
+
+	// 5. Submit the DockSpace Node
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+
+	ImGui::End(); // End "DockSpace Host"
+	// Don't forget to call ImGui::End() for "DockSpace Window" where appropriate!
+	Render();
 	extern std::chrono::steady_clock::time_point lastFrame;
 	auto currentFrame = std::chrono::high_resolution_clock::now();
 	float deltaTime = std::chrono::duration<float>(currentFrame - lastFrame).count();
@@ -2186,4 +2219,45 @@ void AppUI::DrawAudioComponentInspector(AudioComponent& audio) {
 		ImGui::EndDisabled();
 	}
 	ImGui::End();
+}
+static void InitDockSpace(const char* dockspace_name)
+{
+	ImGuiIO& io = ImGui::GetIO();
+
+	if ((io.ConfigFlags & ImGuiConfigFlags_DockingEnable) && !std::filesystem::exists("imgui.ini"))
+	{
+		ImGuiID dockspace_id = ImGui::GetID(dockspace_name);
+
+		// 1. Clear any existing layout
+		ImGui::DockBuilderRemoveNode(dockspace_id);
+
+		// 2. Add full space node WITH the PassthruCentralNode flag!
+		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_PassthruCentralNode);
+		ImGui::DockBuilderSetNodeSize(dockspace_id, io.DisplaySize);
+
+		// 3. Define layout nodes
+		ImGuiID dock_main_id = dockspace_id;
+		ImGuiID dock_id_left;
+		ImGuiID dock_id_right;
+		ImGuiID dock_id_bottom;
+
+		// 4. Split nodes
+		dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
+		dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
+		dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+
+		// 5. Dock windows
+		ImGui::DockBuilderDockWindow("Environment Settings", dock_id_left);
+		ImGui::DockBuilderDockWindow("ECS", dock_id_left);
+
+		ImGui::DockBuilderDockWindow("Network Clients Control Panel", dock_id_right);
+		ImGui::DockBuilderDockWindow("Network Server Control Panel", dock_id_bottom);
+
+		// DO NOT dock "Viewport" or "GizmoOverlay" to dock_main_id if you want the 
+		// raw OpenGL context background visible in the center! 
+		// Leave dock_main_id un-docked so the central node stays completely empty & clear.
+
+		// 6. Finalize layout structure
+		ImGui::DockBuilderFinish(dockspace_id);
+	}
 }

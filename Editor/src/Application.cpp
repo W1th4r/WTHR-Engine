@@ -140,6 +140,7 @@ void Application::Run()
 	ImGuiIO& io = ImGui::GetIO();
 
 	glfwMaximizeWindow(m_WindowManager.GetWindow());
+	ImGui::GetIO().IniFilename = nullptr;
 
 	auto ptrShdr = std::make_shared<Shader>("shaders/default.vert", "shaders/default.frag");
 	//m_Compiler.CookModel(std::string(),std::string("cooked"));
@@ -193,7 +194,7 @@ void Application::Run()
 		m_UI.Update();
 
 
-		m_UI.Render();
+		//m_UI.Render();
 
 
 		m_Renderer.Clear();
@@ -203,7 +204,7 @@ void Application::Run()
 			ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
 		m_Renderer.RenderScene(m_ActiveScene, *ptrShdr);
 		ImGui::End();
-		ImGui::End();
+	//	ImGui::End();//exit dockspace
 
 
 		m_WindowManager.EndFrame();
